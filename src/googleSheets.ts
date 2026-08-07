@@ -1,0 +1,892 @@
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User } from 'firebase/auth';
+import { auth } from './firebase';
+import { Database, ProgramCategory } from './types';
+import { normalizeDB } from './db';
+
+const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+export const GOOGLE_SHEET_ID_KEY = 'mrms_google_sheet_id';
+export const GOOGLE_SHEET_AUTOSYNC_KEY = 'mrms_google_sheet_autosync';
+const GOOGLE_TOKEN_KEY = 'mrms_google_access_token';
+const GOOGLE_TOKEN_EXPIRY_KEY = 'mrms_google_token_expiry';
+
+let cachedAccessToken: string | null = null;
+let googleUser: User | null = null;
+
+export function saveCachedToken(token: string) {
+  cachedAccessToken = token;
+  try {
+    localStorage.setItem(GOOGLE_TOKEN_KEY, token);
+    // OAuth access tokens expire in 1 hour (3600s), set safety margin of 55 mins
+    localStorage.setItem(GOOGLE_TOKEN_EXPIRY_KEY, String(Date.now() + 55 * 60 * 1000));
+  } catch (e) {}
+}
+
+export function getCachedToken(): string | null {
+  if (cachedAccessToken) return cachedAccessToken;
+  try {
+    const storedToken = localStorage.getItem(GOOGLE_TOKEN_KEY);
+    const expiry = localStorage.getItem(GOOGLE_TOKEN_EXPIRY_KEY);
+    if (storedToken && expiry && Date.now() < Number(expiry)) {
+      cachedAccessToken = storedToken;
+      return storedToken;
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function clearCachedToken() {
+  cachedAccessToken = null;
+  try {
+    localStorage.removeItem(GOOGLE_TOKEN_KEY);
+    localStorage.removeItem(GOOGLE_TOKEN_EXPIRY_KEY);
+  } catch (e) {}
+}
+
+export function getSavedSheetId(db?: Database): string | null {
+  if (db?.settings?.googleSheetId) {
+    return db.settings.googleSheetId;
+  }
+  return localStorage.getItem(GOOGLE_SHEET_ID_KEY);
+}
+
+export function saveSheetId(id: string) {
+  if (id.trim()) {
+    localStorage.setItem(GOOGLE_SHEET_ID_KEY, id.trim());
+  } else {
+    localStorage.removeItem(GOOGLE_SHEET_ID_KEY);
+  }
+}
+
+export function isAutoSyncEnabled(): boolean {
+  const saved = localStorage.getItem(GOOGLE_SHEET_AUTOSYNC_KEY);
+  return saved === null ? true : saved === 'true';
+}
+
+export function setAutoSyncEnabled(enabled: boolean) {
+  localStorage.setItem(GOOGLE_SHEET_AUTOSYNC_KEY, enabled ? 'true' : 'false');
+}
+
+export async function checkRedirectResult(): Promise<{ user: User; accessToken: string } | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        saveCachedToken(credential.accessToken);
+        googleUser = result.user;
+        return { user: result.user, accessToken: credential.accessToken };
+      }
+    }
+  } catch (e) {
+    console.warn('Redirect result check error:', e);
+  }
+  return null;
+}
+
+export async function signInWithGoogleForSheets(): Promise<{ user: User; accessToken: string }> {
+  const provider = new GoogleAuthProvider();
+  provider.addScope(SHEETS_SCOPE);
+  provider.addScope(DRIVE_SCOPE);
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential || !credential.accessToken) {
+      throw new Error('Could not retrieve OAuth access token from Google sign-in');
+    }
+
+    saveCachedToken(credential.accessToken);
+    googleUser = result.user;
+
+    return { user: result.user, accessToken: credential.accessToken };
+  } catch (error: any) {
+    console.error('Google Sheets auth error:', error);
+    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user' || error?.message?.includes('popup')) {
+      try {
+        console.log('Popup blocked. Attempting signInWithRedirect...');
+        await signInWithRedirect(auth, provider);
+        return new Promise(() => {});
+      } catch (redirectErr: any) {
+        throw new Error('⚠️ Popup blocked! Please allow popups or open the app in a new browser tab to complete Google Sign-In.\n(ബ്രൗസർ പോപ്പ്-അപ്പ് ബ്ലോക്ക് ചെയ്തു. മുകളിലെ "Open in new tab" ബട്ടൺ ക്ലിക്ക് ചെയ്യുക).');
+      }
+    }
+    throw error;
+  }
+}
+
+export async function googleSignOut() {
+  clearCachedToken();
+  googleUser = null;
+  await signOut(auth);
+}
+
+/**
+ * Creates a new Google Spreadsheet with simplified, readable tabs
+ */
+export async function createGoogleSpreadsheet(title: string, token: string): Promise<{ id: string; url: string }> {
+  const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      properties: {
+        title: title || 'Meeladunnabi Competition Database',
+      },
+      sheets: [
+        { properties: { title: 'Scoreboard' } },
+        { properties: { title: 'Winners List' } },
+        { properties: { title: 'Programs List' } },
+        { properties: { title: 'Program Results' } },
+        { properties: { title: 'Participants' } },
+        { properties: { title: 'System Backup' } },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err?.error?.message || 'Failed to create Google Spreadsheet');
+  }
+
+  const data = await response.json();
+  const id = data.spreadsheetId;
+  const url = data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${id}/edit`;
+
+  saveSheetId(id);
+  return { id, url };
+}
+
+/**
+ * Ensures required tabs exist on an existing spreadsheet
+ */
+async function ensureSheetsExist(spreadsheetId: string, token: string) {
+  try {
+    const getRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!getRes.ok) return;
+
+    const sheetData = await getRes.json();
+    const existingTitles: string[] = (sheetData.sheets || []).map((s: any) => s.properties?.title);
+
+    const required = ['Scoreboard', 'Winners List', 'Programs List', 'Program Results', 'Participants', 'System Backup'];
+    const missing = required.filter(t => !existingTitles.includes(t));
+
+    if (missing.length > 0) {
+      const requests = missing.map(t => ({
+        addSheet: { properties: { title: t } }
+      }));
+
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requests })
+      });
+    }
+  } catch (e) {
+    console.warn('Could not verify/add sheet tabs:', e);
+  }
+}
+
+/**
+ * Transforms Database into simplified, ultra-clean format for Google Sheets
+ */
+export function buildSheetsData(db: Database) {
+  const teamNameMap = new Map<string, string>();
+  db.teams.forEach(t => teamNameMap.set(t.id, t.name));
+
+  const participantNameMap = new Map<string, string>();
+  db.participants.forEach(p => participantNameMap.set(p.id, p.name));
+
+  const getWinnerNamesOnly = (items: any[]) => {
+    if (!items || !items.length) return '-';
+    return items.map(item => item.name || 'Unknown').join(', ');
+  };
+
+  // Tab 1: Teams Scoreboard
+  const scoreboardRows: Array<Array<string | number>> = [
+    ['TEAM CODE', 'TEAM NAME', 'CAPTAIN', 'TOTAL POINTS'],
+    ...db.teams.map(t => [t.id, t.name, t.captain || '-', t.points || 0])
+  ];
+
+  // Tab 2: Clean Winners List
+  const winnersListRows: Array<Array<string | number>> = [
+    ['STUDENT NAME', 'PROGRAM NAME', 'POSITION', 'TEAM NAME']
+  ];
+
+  db.results.forEach(r => {
+    const prog = db.programs.find(p => p.id === r.programId);
+    const progTitle = prog ? (prog.code ? `${prog.code} - ${prog.name}` : prog.name) : 'Program';
+    const w = r.winners || { first: [], second: [], third: [] };
+
+    (w.first || []).forEach(item => {
+      const name = item.name || 'Unknown';
+      const team = item.teamId ? (teamNameMap.get(item.teamId) || item.teamId) : '-';
+      winnersListRows.push([name, progTitle, 'First', team]);
+    });
+
+    (w.second || []).forEach(item => {
+      const name = item.name || 'Unknown';
+      const team = item.teamId ? (teamNameMap.get(item.teamId) || item.teamId) : '-';
+      winnersListRows.push([name, progTitle, 'Second', team]);
+    });
+
+    (w.third || []).forEach(item => {
+      const name = item.name || 'Unknown';
+      const team = item.teamId ? (teamNameMap.get(item.teamId) || item.teamId) : '-';
+      winnersListRows.push([name, progTitle, 'Third', team]);
+    });
+  });
+
+  // Tab 3: Programs List
+  const programsListRows: Array<Array<string | number>> = [
+    ['PROGRAM CODE', 'PROGRAM NAME', 'GENDER SECTION', 'AGE CATEGORY', 'PROGRAM TYPE', 'STAGE TYPE', 'VENUE', 'DAY', 'START TIME', 'END TIME', 'MAX PARTICIPANTS', 'ID'],
+    ...db.programs.map(p => {
+      const genders = (p.categories || []).map(c => c.gender).filter((v, i, a) => a.indexOf(v) === i).join(', ') || 'Boys';
+      const ages = (p.categories || []).map(c => c.age).filter((v, i, a) => a.indexOf(v) === i).join(', ') || 'General';
+      const typeStr = p.group ? 'Group' : 'Single';
+      return [
+        p.code || '',
+        p.name || '',
+        genders,
+        ages,
+        typeStr,
+        p.stageType || 'Main Stage',
+        p.venue || '',
+        p.day || '',
+        p.startTime || '',
+        p.endTime || '',
+        p.maxParticipants ?? '',
+        p.id || ''
+      ];
+    })
+  ];
+
+  // Tab 4: Program Results Overview
+  const programOverviewRows: Array<Array<string | number>> = [
+    ['PROGRAM CODE', 'PROGRAM NAME', '1ST PLACE', '2ND PLACE', '3RD PLACE'],
+    ...db.results.map(r => {
+      const prog = db.programs.find(p => p.id === r.programId);
+      const progCode = prog?.code || '-';
+      const progTitle = prog?.name || 'Program';
+      const w = r.winners || { first: [], second: [], third: [] };
+
+      return [
+        progCode,
+        progTitle,
+        getWinnerNamesOnly(w.first),
+        getWinnerNamesOnly(w.second),
+        getWinnerNamesOnly(w.third)
+      ];
+    })
+  ];
+
+  // Tab 5: Participants List
+  const participantRows: Array<Array<string | number>> = [
+    ['CHEST NO', 'STUDENT NAME', 'TEAM NAME', 'CLASS / AGE', 'GENDER', 'PROGRAM CODES'],
+    ...db.participants.map(p => {
+      const teamName = p.teamId ? (teamNameMap.get(p.teamId) || p.teamId) : '-';
+      const progCodes = (p.programIds || []).map(pid => {
+        const prog = db.programs.find(pr => pr.id === pid);
+        return prog ? (prog.code || prog.name) : pid;
+      }).join(', ');
+
+      return [
+        p.number || '-', 
+        p.name, 
+        teamName, 
+        p.cls ? `Class ${p.cls}` : (p.age || '-'),
+        p.gender || 'Boys',
+        progCodes
+      ];
+    })
+  ];
+
+
+  // Tab 6: System Backup (Chunked to prevent Google Sheets 50,000 char per cell limit)
+  const jsonBackupString = JSON.stringify(db);
+  const CHUNK_SIZE = 30000;
+  const chunks: string[] = [];
+  for (let i = 0; i < jsonBackupString.length; i += CHUNK_SIZE) {
+    chunks.push(jsonBackupString.slice(i, i + CHUNK_SIZE));
+  }
+
+  const systemBackupRows = [
+    ['SYSTEM_JSON_DATA_CHUNK', 'LAST_MODIFIED', 'UPDATED_AT'],
+    ...chunks.map((chunk, idx) => [
+      chunk,
+      idx === 0 ? (db.lastModified || Date.now()) : '',
+      idx === 0 ? new Date().toISOString() : ''
+    ])
+  ];
+
+  return [
+    { range: "'Scoreboard'!A1", values: scoreboardRows },
+    { range: "'Winners List'!A1", values: winnersListRows },
+    { range: "'Programs List'!A1", values: programsListRows },
+    { range: "'Program Results'!A1", values: programOverviewRows },
+    { range: "'Participants'!A1", values: participantRows },
+    { range: "'System Backup'!A1", values: systemBackupRows },
+  ];
+}
+
+/**
+  * Debounced queue wrapper for Google Sheets auto-sync to avoid exceeding API write quota
+  */
+let autoSyncTimer: any = null;
+let pendingSyncData: { db: Database; spreadsheetId: string; token: string } | null = null;
+
+export function queueAutoSyncToGoogleSheet(db: Database, spreadsheetId: string, token: string, delayMs = 3500) {
+  pendingSyncData = { db, spreadsheetId, token };
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+  }
+  autoSyncTimer = setTimeout(async () => {
+    if (pendingSyncData) {
+      const dataToSync = pendingSyncData;
+      pendingSyncData = null;
+      try {
+        await syncDataToGoogleSheet(dataToSync.db, dataToSync.spreadsheetId, dataToSync.token);
+      } catch (err) {
+        console.warn('Queued Google Sheets auto-sync error:', err);
+      }
+    }
+  }, delayMs);
+}
+
+/**
+ * Pushes data to Google Spreadsheet with single-batch clear & automatic retry for rate limits
+ */
+export async function syncDataToGoogleSheet(db: Database, spreadsheetId: string, token: string, retryCount = 0): Promise<boolean> {
+  if (!spreadsheetId || !token) {
+    return false;
+  }
+
+  try {
+    // Confirm sheets exist
+    await ensureSheetsExist(spreadsheetId, token);
+
+    const dataPayload = buildSheetsData(db);
+
+    // Batch clear existing ranges in ONE single API call to save Google Sheets write quota
+    const clearTabs = [
+      "'Scoreboard'!A1:Z5000",
+      "'Winners List'!A1:Z5000",
+      "'Programs List'!A1:Z5000",
+      "'Program Results'!A1:Z5000",
+      "'Participants'!A1:Z5000",
+      "'System Backup'!A1:Z5000"
+    ];
+
+    try {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ranges: clearTabs }),
+      });
+    } catch (e) {
+      console.warn('Batch clear warning:', e);
+    }
+
+    // Batch update new data
+    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: dataPayload,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      const errMsg = err?.error?.message || '';
+
+      if ((response.status === 429 || errMsg.includes('Quota exceeded') || response.status === 503) && retryCount < 2) {
+        console.warn(`Google Sheets write quota reached. Retrying in 4 seconds... (Attempt ${retryCount + 1})`);
+        await new Promise(res => setTimeout(res, 4000));
+        return syncDataToGoogleSheet(db, spreadsheetId, token, retryCount + 1);
+      }
+
+      throw new Error(errMsg || 'Failed to update Google Spreadsheet');
+    }
+
+    return true;
+  } catch (err: any) {
+    if (retryCount < 2 && (err?.message?.includes('Quota') || err?.message?.includes('429'))) {
+      await new Promise(res => setTimeout(res, 4000));
+      return syncDataToGoogleSheet(db, spreadsheetId, token, retryCount + 1);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Fetches latest database state from Google Spreadsheet
+ */
+export function parseCategoriesFromInput(genderStr: string, ageStr: string): ProgramCategory[] {
+  const gStr = (genderStr || '').trim().toLowerCase();
+  const aStr = (ageStr || '').trim().toLowerCase();
+
+  // 1. Detect Genders
+  const detectedGenders: Array<'Boys' | 'Girls' | 'General'> = [];
+
+  if (gStr.includes('boy') || gStr.includes('male') || gStr.includes('ആൺ') || gStr === 'b' || gStr === 'm') {
+    detectedGenders.push('Boys');
+  }
+  if (gStr.includes('girl') || gStr.includes('female') || gStr.includes('പെൺ') || gStr === 'g' || gStr === 'f' || gStr.includes('lady') || gStr.includes('women')) {
+    detectedGenders.push('Girls');
+  }
+  if (gStr.includes('gen') || gStr.includes('open') || gStr.includes('പൊതു') || (gStr.includes('all') && detectedGenders.length === 0)) {
+    detectedGenders.push('General');
+  }
+
+  // 2. Detect Ages
+  const detectedAges: Array<'Kids' | 'Sub Junior' | 'Junior' | 'Senior' | 'Super Senior' | 'General' | 'All'> = [];
+
+  // Kids check: 'kid', '1-2', '1 - 2', '1,2', '1, 2', 'class 1', 'class 2', 'c1', 'c2'
+  if (/kid|1\s*[-,\&/]\s*2|class\s*[12]\b|\bc1\b|\bc2\b/i.test(aStr)) {
+    detectedAges.push('Kids');
+  }
+
+  // Sub Junior check: 'sub', '3-4', '3 - 4', '3,4', '3, 4', 'class 3', 'class 4', 'c3', 'c4', 'sub-jr', 'sub jr', 'subjr', 'sj'
+  if (/sub|3\s*[-,\&/]\s*4|class\s*[34]\b|\bc3\b|\bc4\b|sub\s*[-_]?\s*jr|\bsj\b/i.test(aStr)) {
+    detectedAges.push('Sub Junior');
+  }
+
+  // Super Senior check: 'super', '9-12', 'class 9', 'class 10', 'class 11', 'class 12', 'high school', 'secondary', 'super-sr', 'supersr', 'ss'
+  if (/super|9\s*[-,\&/]\s*12|class\s*(9|10|11|12)\b|\bc(9|10|11|12)\b|super\s*[-_]?\s*sr|high\s*school|secondary|\bss\b/i.test(aStr)) {
+    detectedAges.push('Super Senior');
+  }
+
+  // Senior check: remove 'super' terms first so "Senior, Super Senior" works cleanly
+  const aStrWithoutSuper = aStr.replace(/super\s*[-_]?\s*sr|super\s*senior|supersr|super|\bss\b/gi, '');
+  if (/senior|7\s*[-,\&/]\s*8|class\s*[78]\b|\bc[78]\b|\bsr\.?\b/i.test(aStrWithoutSuper)) {
+    detectedAges.push('Senior');
+  }
+
+  // Junior check: remove 'sub' terms first so "Sub Junior, Junior" works cleanly
+  const aStrWithoutSub = aStr.replace(/sub\s*[-_]?\s*jr|sub\s*junior|subjr|sub|\bsj\b/gi, '');
+  if (/junior|5\s*[-,\&/]\s*6|class\s*[56]\b|\bc[56]\b|\bjr\.?\b/i.test(aStrWithoutSub)) {
+    detectedAges.push('Junior');
+  }
+
+  // General check
+  if (/gen|open|പൊതു|5\s*[-,\&/]\s*12|1\s*[-,\&/]\s*12/i.test(aStr)) {
+    detectedAges.push('General');
+  }
+
+  // All check
+  if (/\ball\b|all\s*cat/i.test(aStr) && detectedAges.length === 0) {
+    detectedAges.push('All');
+  }
+
+  // Fallback defaults
+  if (detectedGenders.length === 0) {
+    if (detectedAges.includes('General') || detectedAges.includes('All')) {
+      detectedGenders.push('General');
+    } else {
+      detectedGenders.push('Boys');
+    }
+  }
+
+  if (detectedAges.length === 0) {
+    detectedAges.push('General');
+  }
+
+  // Build combined ProgramCategory array
+  const categories: ProgramCategory[] = [];
+  const seenKey = new Set<string>();
+
+  for (const g of detectedGenders) {
+    for (const a of detectedAges) {
+      const key = `${g}_${a}`;
+      if (!seenKey.has(key)) {
+        seenKey.add(key);
+        categories.push({ gender: g, age: a });
+      }
+    }
+  }
+
+  return categories.length > 0 ? categories : [{ gender: 'General', age: 'General' }];
+}
+
+export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: string): Promise<Database | null> {
+  if (!spreadsheetId || !token) return null;
+
+  try {
+    let currentDb: Database | null = null;
+    let hasBackupData = false;
+
+    // 1. Fetch System Backup (All chunked rows in column A)
+    const backupRange = encodeURIComponent("'System Backup'!A2:A1000");
+    const backupRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${backupRange}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (backupRes.ok) {
+      const backupData = await backupRes.json();
+      const rows = backupData.values;
+      if (rows && rows.length > 0) {
+        try {
+          const combinedJson = rows.map((r: string[]) => r[0] || '').join('');
+          if (combinedJson.trim()) {
+            currentDb = normalizeDB(JSON.parse(combinedJson));
+            hasBackupData = true;
+          }
+        } catch (err) {
+          console.warn('System Backup JSON parse error:', err);
+        }
+      }
+    }
+
+    if (!currentDb) {
+      currentDb = normalizeDB({});
+    }
+
+    let importedProgramCount = 0;
+    let importedParticipantCount = 0;
+
+    // 2. Fetch Teams List directly from the Scoreboard tab (if user modified teams in Google Sheets)
+    try {
+      const teamsRange = encodeURIComponent("'Scoreboard'!A1:E500");
+      const teamsRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${teamsRange}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (teamsRes.ok) {
+        const teamsData = await teamsRes.json();
+        const tRows: Array<string[]> = teamsData.values || [];
+        if (tRows.length > 1) {
+          const existingTeamsMap = new Map<string, any>();
+          (currentDb.teams || []).forEach(t => {
+            if (t.id) existingTeamsMap.set(t.id, t);
+            if (t.name) existingTeamsMap.set(t.name.toLowerCase(), t);
+          });
+
+          const updatedTeamsList: any[] = [];
+          tRows.forEach((row, idx) => {
+            if (idx === 0 || !row || row.length === 0) return;
+            const code = (row[0] || '').trim();
+            const name = (row[1] || '').trim();
+            const captain = (row[2] || '').trim();
+            const pointsRaw = (row[3] || '').trim();
+
+            if (!name || name.toUpperCase() === 'TEAM NAME' || code.toUpperCase() === 'TEAM CODE') return;
+
+            const existingTeam = (code && existingTeamsMap.get(code)) || existingTeamsMap.get(name.toLowerCase());
+            const points = !isNaN(Number(pointsRaw)) && pointsRaw !== '' ? Number(pointsRaw) : (existingTeam?.points || 0);
+
+            updatedTeamsList.push({
+              id: existingTeam?.id || code || `team_sheet_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              name,
+              symbol: existingTeam?.symbol || '🚩',
+              color: existingTeam?.color || '#1b8155',
+              captain: captain !== '-' ? captain : (existingTeam?.captain || ''),
+              boysCaptain: existingTeam?.boysCaptain || '',
+              girlsCaptain: existingTeam?.girlsCaptain || '',
+              points
+            });
+          });
+
+          if (updatedTeamsList.length > 0) {
+            currentDb.teams = updatedTeamsList;
+          }
+        }
+      }
+    } catch (sheetErr) {
+      console.warn('Could not read Scoreboard tab:', sheetErr);
+    }
+
+    // 3. Fetch Programs List directly from the Programs List tab (if user added/modified programs in Google Sheets)
+    try {
+      const progsRange = encodeURIComponent("'Programs List'!A1:L1000");
+      const progsRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${progsRange}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (progsRes.ok) {
+        const progsData = await progsRes.json();
+        const pRows: Array<string[]> = progsData.values || [];
+
+        const existingProgramsMap = new Map<string, any>();
+        (currentDb.programs || []).forEach((p: any) => {
+          if (p.id) existingProgramsMap.set(p.id, p);
+          if (p.code) existingProgramsMap.set(p.code.toLowerCase(), p);
+          if (p.name) existingProgramsMap.set(p.name.toLowerCase(), p);
+        });
+
+        const updatedProgramsList: any[] = [];
+
+        // Dynamic header row column detection
+        const headerRow = (pRows[0] || []).map(h => (h || '').toString().trim().toUpperCase());
+        let colCode = headerRow.findIndex(h => h.includes('CODE'));
+        if (colCode === -1) colCode = 0;
+
+        let colName = headerRow.findIndex(h => h.includes('NAME') && !h.includes('CODE') && !h.includes('TEAM'));
+        if (colName === -1) colName = 1;
+
+        const colCategory = headerRow.findIndex(h => h === 'CATEGORY');
+
+        let colGender = headerRow.findIndex(h => h.includes('GENDER') || h.includes('SEX') || h === 'SECTION' || h.includes('GENDER SECTION'));
+        if (colGender === -1 && colCategory !== -1) colGender = colCategory;
+        if (colGender === -1) colGender = 2;
+
+        let colAge = headerRow.findIndex(h => (h.includes('AGE') && !h.includes('STAGE')) || h.includes('CLASS') || h.includes('DIVISION'));
+        if (colAge === -1 && colCategory !== -1) colAge = colCategory;
+        if (colAge === -1) colAge = 3;
+
+        let colType = headerRow.findIndex(h => h.includes('PROGRAM TYPE') || h.includes('SINGLE') || (h.includes('TYPE') && !h.includes('STAGE')));
+        if (colType === -1) colType = 4;
+
+        let colStage = headerRow.findIndex(h => h.includes('STAGE'));
+        if (colStage === -1) colStage = 5;
+
+        let colVenue = headerRow.findIndex(h => h.includes('VENUE') || h.includes('LOCATION') || h.includes('PLACE'));
+        if (colVenue === -1) colVenue = 6;
+
+        let colDay = headerRow.findIndex(h => h.includes('DAY') || h.includes('DATE'));
+        if (colDay === -1) colDay = 7;
+
+        let colStart = headerRow.findIndex(h => h.includes('START TIME') || h === 'START' || (h.includes('START') && !h.includes('END')));
+        if (colStart === -1) colStart = 8;
+
+        let colEnd = headerRow.findIndex(h => h.includes('END TIME') || h === 'END' || (h.includes('END') && !h.includes('GENDER') && !h.includes('ATTEND')));
+        if (colEnd === -1) colEnd = 9;
+
+        let colMax = headerRow.findIndex(h => h.includes('MAX') || h.includes('LIMIT') || h.includes('CAPACITY'));
+        if (colMax === -1) colMax = 10;
+
+        let colId = headerRow.findIndex(h => h === 'ID' || h === 'PROGRAM ID');
+        if (colId === -1) colId = 11;
+
+        pRows.forEach((row, rowIndex) => {
+          if (!row || rowIndex === 0) return;
+          const code = (row[colCode] || '').trim();
+          const name = (row[colName] || '').trim();
+          if (!name || !code || name.toUpperCase() === 'PROGRAM NAME' || name.toUpperCase() === 'NAME' || code.toUpperCase() === 'CODE' || code.toUpperCase() === 'PROGRAM CODE') return;
+
+          importedProgramCount++;
+
+          const genderStr = (row[colGender] || '').trim();
+          const ageStr = (row[colAge] || '').trim();
+          const typeStr = (row[colType] || '').trim().toLowerCase();
+          const stageTypeStr = (row[colStage] || '').trim().toLowerCase();
+          const venue = (row[colVenue] || '').trim();
+          const day = (row[colDay] || '').trim();
+          let startTime = (row[colStart] || '').trim();
+          let endTime = (row[colEnd] || '').trim();
+          const maxPartsRaw = (row[colMax] || '').trim();
+          const givenId = (row[colId] || '').trim();
+
+          // Sanitize time strings in case column misalignment accidentally picked up gender strings
+          if (startTime.toLowerCase().includes('boy') || startTime.toLowerCase().includes('girl') || startTime.toLowerCase().includes('general')) {
+            startTime = '';
+          }
+          if (endTime.toLowerCase().includes('boy') || endTime.toLowerCase().includes('girl') || endTime.toLowerCase().includes('general')) {
+            endTime = '';
+          }
+
+          const stageType = stageTypeStr.includes('off') ? 'Offstage' : 'Main Stage';
+          const maxParticipants = maxPartsRaw && !isNaN(Number(maxPartsRaw)) ? Number(maxPartsRaw) : null;
+          const isGroup = typeStr.includes('group');
+
+          const parsedCategories = parseCategoriesFromInput(genderStr, ageStr);
+          const firstCat = parsedCategories[0] || { gender: 'Boys', age: 'General' };
+
+          const existingProg = (givenId && existingProgramsMap.get(givenId)) ||
+                               (code && existingProgramsMap.get(code.toLowerCase())) ||
+                               (name && existingProgramsMap.get(name.toLowerCase()));
+
+          updatedProgramsList.push({
+            id: givenId || existingProg?.id || `prog_sheet_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            code: code || existingProg?.code || `P${updatedProgramsList.length + 1}`,
+            name: name || existingProg?.name || 'Unnamed Program',
+            gender: firstCat.gender,
+            age: firstCat.age,
+            day: colDay !== -1 ? day : (existingProg?.day || ''),
+            venue: colVenue !== -1 ? venue : (existingProg?.venue || ''),
+            startTime: colStart !== -1 ? startTime : (existingProg?.startTime || ''),
+            endTime: colEnd !== -1 ? endTime : (existingProg?.endTime || ''),
+            duration: existingProg?.duration || '15 min',
+            description: existingProg?.description || '',
+            maxParticipants,
+            single: !isGroup,
+            group: isGroup,
+            categories: parsedCategories,
+            stageType
+          });
+        });
+
+        if (updatedProgramsList.length > 0) {
+          currentDb = {
+            ...currentDb,
+            programs: updatedProgramsList
+          };
+        }
+      }
+    } catch (sheetErr) {
+      console.warn('Could not read Programs List tab:', sheetErr);
+    }
+
+    // 4. Fetch Participants List directly from the Participants tab (supports Gender & Program Codes)
+    try {
+      const partsRange = encodeURIComponent("'Participants'!A1:F3000");
+      const partsRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${partsRange}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (partsRes.ok) {
+        const partsData = await partsRes.json();
+        const partRows: Array<string[]> = partsData.values || [];
+
+        const teamNameMap = new Map<string, string>();
+        (currentDb.teams || []).forEach(t => teamNameMap.set(t.name.toLowerCase(), t.id));
+
+        const chestMap = new Map<string, any>();
+        const nameMap = new Map<string, any>();
+        (currentDb.participants || []).forEach(p => {
+          if (p.number && p.number !== '-') chestMap.set((p.number || '').toString().trim().toLowerCase(), p);
+          if (p.name) nameMap.set(p.name.trim().toLowerCase().replace(/\s+/g, ' '), p);
+        });
+
+        const updatedParticipantsList: any[] = [];
+
+        partRows.forEach((row) => {
+          if (!row || row.length < 2) return;
+          
+          // Header check
+          const col0 = (row[0] || '').trim().toUpperCase();
+          const col1 = (row[1] || '').trim().toUpperCase();
+          if (col0 === 'CHEST NO' || col1 === 'STUDENT NAME') return;
+
+          const chestNo = (row[0] || '').trim();
+          const name = (row[1] || '').trim();
+          if (!name) return;
+
+          importedParticipantCount++;
+          const teamStr = (row[2] || '').trim();
+          const classAgeStr = (row[3] || '').trim();
+          const genderStr = (row[4] || '').trim();
+          const progCodesStr = (row[5] || '').trim();
+
+          // Auto-match or infer team
+          let matchedTeamId = teamNameMap.get(teamStr.toLowerCase()) || null;
+          if (!matchedTeamId && teamStr && teamStr !== '-') {
+            // Create missing team automatically so team association isn't lost
+            const newTeamId = `team_sheet_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            currentDb.teams.push({
+              id: newTeamId,
+              name: teamStr,
+              symbol: '🚩',
+              color: '#1b8155',
+              captain: '',
+              boysCaptain: '',
+              girlsCaptain: '',
+              points: 0
+            });
+            teamNameMap.set(teamStr.toLowerCase(), newTeamId);
+            matchedTeamId = newTeamId;
+          }
+
+          const cls = classAgeStr.replace(/class/i, '').trim();
+
+          // Infer gender accurately (Girls vs Boys)
+          let gender: 'Boys' | 'Girls' = 'Boys';
+          if (
+            genderStr.toLowerCase().includes('girl') || 
+            genderStr.toLowerCase().includes('female') || 
+            genderStr.toLowerCase().includes('പെൺ') ||
+            classAgeStr.toLowerCase().includes('girl')
+          ) {
+            gender = 'Girls';
+          } else if (
+            genderStr.toLowerCase().includes('boy') || 
+            genderStr.toLowerCase().includes('male') || 
+            genderStr.toLowerCase().includes('ആൺ')
+          ) {
+            gender = 'Boys';
+          }
+
+          // Map program codes to program IDs
+          const programIds: string[] = [];
+          if (progCodesStr) {
+            const codeList = progCodesStr.split(',').map(c => c.trim()).filter(Boolean);
+            codeList.forEach(c => {
+              const matchedProg = currentDb?.programs.find(pr => 
+                pr.code.toLowerCase() === c.toLowerCase() || 
+                pr.name.toLowerCase() === c.toLowerCase() ||
+                pr.id === c
+              );
+              if (matchedProg && !programIds.includes(matchedProg.id)) {
+                programIds.push(matchedProg.id);
+              }
+            });
+          }
+
+          const chestClean = chestNo && chestNo !== '-' ? chestNo.trim().toLowerCase() : '';
+          const nameClean = name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+          const existingPart = (chestClean && chestMap.get(chestClean)) || (nameClean && nameMap.get(nameClean));
+
+          updatedParticipantsList.push({
+            id: existingPart?.id || `part_sheet_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            number: chestNo && chestNo !== '-' ? chestNo : (existingPart?.number || String(updatedParticipantsList.length + 100)),
+            name: name || existingPart?.name || 'Unnamed Candidate',
+            cls: cls || existingPart?.cls || '',
+            division: existingPart?.division || '',
+            gender: gender || existingPart?.gender || 'Boys',
+            age: existingPart?.age || 'Junior',
+            teamId: matchedTeamId || existingPart?.teamId || null,
+            programIds
+          });
+        });
+
+        if (updatedParticipantsList.length > 0) {
+          currentDb = {
+            ...currentDb,
+            participants: updatedParticipantsList
+          };
+        }
+      }
+    } catch (sheetErr) {
+      console.warn('Could not read Participants tab:', sheetErr);
+    }
+
+    currentDb = normalizeDB({
+      ...currentDb,
+      lastModified: Date.now() + 10000
+    }) || currentDb;
+
+    // Return null if completely empty to show user friendly "No valid data found in sheet" message
+    if (!hasBackupData && importedProgramCount === 0 && importedParticipantCount === 0 && currentDb.participants.length === 0) {
+      return null;
+    }
+
+    // Immediately sync back generated IDs and updated backup to Google Sheet so ID column and System Backup get filled in Sheet
+    try {
+      await syncDataToGoogleSheet(currentDb, spreadsheetId, token);
+    } catch (syncBackErr) {
+      console.warn('Auto sync-back after fetch warning:', syncBackErr);
+    }
+
+    return currentDb;
+  } catch (e) {
+    console.warn('Failed to fetch from Google Sheet:', e);
+    return null;
+  }
+}
+
