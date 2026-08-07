@@ -1126,6 +1126,7 @@ export default function Settings({
                   checked={!db.settings?.isPublicSiteOffline}
                   onChange={(e) => {
                     const isON = e.target.checked;
+                    const isOffline = !isON;
                     if (onSaveEventInfo) {
                       onSaveEventInfo({
                         eventName: evtName,
@@ -1142,7 +1143,8 @@ export default function Settings({
                         noticeText: noticesList[0]?.text || noticeText,
                         notices: noticesList,
                         noticeDurationSecs: Number(noticeDurationSecs) || 8,
-                        colorTheme
+                        colorTheme,
+                        isPublicSiteOffline: isOffline
                       });
                     }
                   }}
@@ -1182,7 +1184,8 @@ export default function Settings({
                       noticeText: noticesList[0]?.text || noticeText,
                       notices: noticesList,
                       noticeDurationSecs: Number(noticeDurationSecs) || 8,
-                      colorTheme
+                      colorTheme,
+                      offlineMessage: msg
                     });
                   }
                 }}
@@ -1805,7 +1808,29 @@ export default function Settings({
                 type="checkbox"
                 id="showScoreboardChk"
                 checked={showScoreboard}
-                onChange={(e) => setShowScoreboard(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setShowScoreboard(val);
+                  if (onSaveEventInfo) {
+                    onSaveEventInfo({
+                      eventName: evtName,
+                      boardName: brdName,
+                      subtitle: subName,
+                      eventLogo: evtLogo,
+                      showFinalWinner: showWinner,
+                      showScoreboard: val,
+                      showCandidatePoints: showCandidatePoints,
+                      showDetailedScoreboard: showDetailedScoreboard,
+                      showIndividualChampions: showIndividualChampions,
+                      showNotice: showNotice,
+                      noticeTitle: noticesList[0]?.title || noticeTitle,
+                      noticeText: noticesList[0]?.text || noticeText,
+                      notices: noticesList,
+                      noticeDurationSecs: Number(noticeDurationSecs) || 8,
+                      colorTheme
+                    });
+                  }
+                }}
                 className="w-4 h-4 rounded mt-0.5 accent-brand-green-800 cursor-pointer"
               />
               <label htmlFor="showScoreboardChk" className="text-xs text-brand-ink font-semibold cursor-pointer select-none leading-normal">
@@ -1821,7 +1846,29 @@ export default function Settings({
                 type="checkbox"
                 id="showCandidatePointsChk"
                 checked={showCandidatePoints}
-                onChange={(e) => setShowCandidatePoints(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setShowCandidatePoints(val);
+                  if (onSaveEventInfo) {
+                    onSaveEventInfo({
+                      eventName: evtName,
+                      boardName: brdName,
+                      subtitle: subName,
+                      eventLogo: evtLogo,
+                      showFinalWinner: showWinner,
+                      showScoreboard: showScoreboard,
+                      showCandidatePoints: val,
+                      showDetailedScoreboard: showDetailedScoreboard,
+                      showIndividualChampions: showIndividualChampions,
+                      showNotice: showNotice,
+                      noticeTitle: noticesList[0]?.title || noticeTitle,
+                      noticeText: noticesList[0]?.text || noticeText,
+                      notices: noticesList,
+                      noticeDurationSecs: Number(noticeDurationSecs) || 8,
+                      colorTheme
+                    });
+                  }
+                }}
                 className="w-4 h-4 rounded mt-0.5 accent-brand-green-800 cursor-pointer"
               />
               <label htmlFor="showCandidatePointsChk" className="text-xs text-brand-ink font-semibold cursor-pointer select-none leading-normal">
@@ -1837,7 +1884,29 @@ export default function Settings({
                 type="checkbox"
                 id="showDetailedScoreboardChk"
                 checked={showDetailedScoreboard}
-                onChange={(e) => setShowDetailedScoreboard(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setShowDetailedScoreboard(val);
+                  if (onSaveEventInfo) {
+                    onSaveEventInfo({
+                      eventName: evtName,
+                      boardName: brdName,
+                      subtitle: subName,
+                      eventLogo: evtLogo,
+                      showFinalWinner: showWinner,
+                      showScoreboard: showScoreboard,
+                      showCandidatePoints: showCandidatePoints,
+                      showDetailedScoreboard: val,
+                      showIndividualChampions: showIndividualChampions,
+                      showNotice: showNotice,
+                      noticeTitle: noticesList[0]?.title || noticeTitle,
+                      noticeText: noticesList[0]?.text || noticeText,
+                      notices: noticesList,
+                      noticeDurationSecs: Number(noticeDurationSecs) || 8,
+                      colorTheme
+                    });
+                  }
+                }}
                 className="w-4 h-4 rounded mt-0.5 accent-brand-green-800 cursor-pointer"
               />
               <label htmlFor="showDetailedScoreboardChk" className="text-xs text-brand-ink font-semibold cursor-pointer select-none leading-normal">
@@ -1853,7 +1922,29 @@ export default function Settings({
                 type="checkbox"
                 id="showIndividualChampionsChk"
                 checked={showIndividualChampions}
-                onChange={(e) => setShowIndividualChampions(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setShowIndividualChampions(val);
+                  if (onSaveEventInfo) {
+                    onSaveEventInfo({
+                      eventName: evtName,
+                      boardName: brdName,
+                      subtitle: subName,
+                      eventLogo: evtLogo,
+                      showFinalWinner: showWinner,
+                      showScoreboard: showScoreboard,
+                      showCandidatePoints: showCandidatePoints,
+                      showDetailedScoreboard: showDetailedScoreboard,
+                      showIndividualChampions: val,
+                      showNotice: showNotice,
+                      noticeTitle: noticesList[0]?.title || noticeTitle,
+                      noticeText: noticesList[0]?.text || noticeText,
+                      notices: noticesList,
+                      noticeDurationSecs: Number(noticeDurationSecs) || 8,
+                      colorTheme
+                    });
+                  }
+                }}
                 className="w-4 h-4 rounded mt-0.5 accent-brand-green-800 cursor-pointer"
               />
               <label htmlFor="showIndividualChampionsChk" className="text-xs text-brand-ink font-semibold cursor-pointer select-none leading-normal">

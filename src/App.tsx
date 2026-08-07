@@ -363,7 +363,9 @@ export default function App() {
     noticeText?: string;
     notices?: NoticeItem[];
     noticeDurationSecs?: number;
-    colorTheme?: 'natural' | 'outdoor-light' | 'outdoor-dark' | 'solar-high-contrast';
+    colorTheme?: 'natural' | 'outdoor-light' | 'outdoor-dark' | 'solar-high-contrast' | 'royal-gold' | 'emerald-luxury' | 'crimson-ruby' | 'ocean-breeze';
+    isPublicSiteOffline?: boolean;
+    offlineMessage?: string;
   }) => {
     handleUpdateDb({
       ...db,
@@ -383,7 +385,9 @@ export default function App() {
         noticeText: info.noticeText,
         notices: info.notices || db.settings.notices,
         noticeDurationSecs: info.noticeDurationSecs,
-        colorTheme: info.colorTheme || db.settings.colorTheme || 'natural'
+        colorTheme: info.colorTheme || db.settings.colorTheme || 'natural',
+        isPublicSiteOffline: info.isPublicSiteOffline !== undefined ? info.isPublicSiteOffline : db.settings.isPublicSiteOffline,
+        offlineMessage: info.offlineMessage !== undefined ? info.offlineMessage : db.settings.offlineMessage
       }
     });
   };

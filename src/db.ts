@@ -328,6 +328,55 @@ export async function pushToFirebase(db: Database): Promise<boolean> {
 }
 
 
+export function mergeSettings(localSettings: Settings, remoteSettings: Settings): Settings {
+  if (!localSettings) return remoteSettings || defaultDB().settings;
+  if (!remoteSettings) return localSettings;
+
+  const merged: Settings = {
+    ...defaultDB().settings,
+    ...remoteSettings,
+    ...localSettings
+  };
+
+  // Preserve all explicitly defined keys from both sides
+  for (const key of Object.keys(localSettings) as (keyof Settings)[]) {
+    const lVal = localSettings[key];
+    const rVal = remoteSettings[key];
+    if (lVal !== undefined && rVal === undefined) {
+      (merged as any)[key] = lVal;
+    }
+  }
+
+  // Explicit boolean switches
+  const booleanKeys: (keyof Settings)[] = [
+    'isPublicSiteOffline',
+    'isLiveCelebrationActive',
+    'showFinalWinner',
+    'skipPodiumCountdown',
+    'showAlwaysTeamBanner',
+    'showTeamPointsInBanner',
+    'showTeamAnalyticsGraph',
+    'showTeamTicker',
+    'suspenseSwapMode',
+    'showScoreboard',
+    'showCandidatePoints',
+    'showDetailedScoreboard',
+    'showIndividualChampions',
+    'showNotice',
+    'noticePopupOnLoad'
+  ];
+
+  for (const bk of booleanKeys) {
+    if (localSettings[bk] !== undefined && remoteSettings[bk] === undefined) {
+      (merged as any)[bk] = localSettings[bk];
+    } else if (remoteSettings[bk] !== undefined) {
+      (merged as any)[bk] = remoteSettings[bk];
+    }
+  }
+
+  return merged;
+}
+
 export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
   if (!localDb) return remoteDb;
   if (!remoteDb) return localDb;
@@ -335,22 +384,18 @@ export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
   const localTime = localDb.lastModified || 0;
   const remoteTime = remoteDb.lastModified || 0;
 
+  const mergedSettings = mergeSettings(localDb?.settings, remoteDb?.settings);
+
   if (remoteTime > localTime) {
     return {
       ...remoteDb,
-      settings: {
-        ...(localDb.settings || {}),
-        ...(remoteDb.settings || {})
-      }
+      settings: mergedSettings
     };
   }
 
   return {
     ...localDb,
-    settings: {
-      ...(remoteDb.settings || {}),
-      ...(localDb.settings || {})
-    }
+    settings: mergedSettings
   };
 }
 
