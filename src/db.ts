@@ -1,4 +1,5 @@
 import { Database, Team, Participant, Result } from './types';
+import { saveToFirestore, fetchFromFirestore } from './firebase';
 import { 
   getSavedSheetId, 
   getCachedToken, 
@@ -317,7 +318,10 @@ export async function pushToFirebase(db: Database): Promise<boolean> {
   const updated = { ...db, lastModified: Date.now() };
   saveDBLocal(updated, true);
 
-  // Push to local server endpoint
+  // Push to Firestore Cloud Database for instant multi-device real-time sync across Netlify / GitHub Pages
+  saveToFirestore(updated).catch(() => {});
+
+  // Also push to local server endpoint
   pushToServer(updated).catch(() => {});
 
   return true;
@@ -331,25 +335,22 @@ export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
   const localTime = localDb.lastModified || 0;
   const remoteTime = remoteDb.lastModified || 0;
 
-  // Always preserve local settings (switches, toggles, notices, admin preferences)
-  // so that read-only Google Apps Script fetches never overwrite or reset user switch toggles.
-  const mergedSettings = {
-    ...(remoteDb.settings || {}),
-    ...(localDb.settings || {})
-  };
-
-  // If remote timestamp is strictly newer, remote competition data is authoritative
   if (remoteTime > localTime) {
     return {
       ...remoteDb,
-      settings: mergedSettings
+      settings: {
+        ...(localDb.settings || {}),
+        ...(remoteDb.settings || {})
+      }
     };
   }
 
-  // Otherwise local database is authoritative
   return {
     ...localDb,
-    settings: mergedSettings
+    settings: {
+      ...(remoteDb.settings || {}),
+      ...(localDb.settings || {})
+    }
   };
 }
 
@@ -479,13 +480,14 @@ export async function fetchFromServer(): Promise<Database | null> {
 
 export async function syncDatabase(localDb: Database): Promise<{ db: Database; updated: boolean }> {
   try {
-    const [remoteServer, remoteSheet, remoteAppsScript] = await Promise.all([
+    const [remoteFirestore, remoteServer, remoteSheet, remoteAppsScript] = await Promise.all([
+      fetchFromFirestore().catch(() => null),
       fetchFromServer().catch(() => null),
       fetchFromCloudSheet().catch(() => null),
       fetchFromAppsScriptDirect().catch(() => null)
     ]);
 
-    const remotes = [remoteServer, remoteSheet, remoteAppsScript].filter((r): r is Database => r !== null && Array.isArray(r.teams));
+    const remotes = [remoteFirestore, remoteServer, remoteSheet, remoteAppsScript].filter((r): r is Database => r !== null && Array.isArray(r.teams));
     let latestRemote: Database | null = null;
     if (remotes.length > 0) {
       remotes.sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
@@ -498,13 +500,24 @@ export async function syncDatabase(localDb: Database): Promise<{ db: Database; u
 
     const localTime = localDb?.lastModified || 0;
     const remoteTime = latestRemote?.lastModified || 0;
+    const localTeamsCount = localDb?.teams?.length || 0;
+    const remoteTeamsCount = latestRemote?.teams?.length || 0;
+    const localResultsCount = localDb?.results?.length || 0;
+    const remoteResultsCount = latestRemote?.results?.length || 0;
 
-    if (remoteTime > localTime) {
+    const shouldUpdateFromRemote = 
+      remoteTime > localTime || 
+      localTeamsCount === 0 && remoteTeamsCount > 0 ||
+      remoteTeamsCount > localTeamsCount ||
+      remoteResultsCount > localResultsCount;
+
+    if (shouldUpdateFromRemote) {
       const merged = mergeDatabase(localDb, latestRemote);
       const calculated = calculatePoints(merged);
       saveDBLocal(calculated, true);
       return { db: calculated, updated: true };
-    } else if (localTime > remoteTime) {
+    } else if (localTime > remoteTime && localTeamsCount > 0) {
+      saveToFirestore(localDb).catch(() => {});
       pushToServer(localDb).catch(() => {});
       return { db: localDb, updated: false };
     }

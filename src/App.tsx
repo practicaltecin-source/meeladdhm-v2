@@ -27,6 +27,7 @@ import {
   syncDataToGoogleSheet, 
   queueAutoSyncToGoogleSheet 
 } from './googleSheets';
+import { subscribeToFirestore } from './firebase';
 import { WifiOff, Lock, ShieldAlert } from 'lucide-react';
 import Splash from './components/Splash';
 import Header from './components/Header';
@@ -106,12 +107,16 @@ export default function App() {
               const normalized = normalizeDB(dbObj);
               if (normalized) {
                 const currentLocal = dbRef.current || loadDB();
-                const merged = mergeDatabase(currentLocal, normalized);
-                const calculated = calculatePoints(merged);
-                saveDBLocal(calculated, true);
-                dbRef.current = calculated;
-                setDb(calculated);
-                return true;
+                const remoteTime = normalized.lastModified || 0;
+                const localTime = currentLocal.lastModified || 0;
+                if (remoteTime > localTime) {
+                  const merged = mergeDatabase(currentLocal, normalized);
+                  const calculated = calculatePoints(merged);
+                  saveDBLocal(calculated, true);
+                  dbRef.current = calculated;
+                  setDb(calculated);
+                  return true;
+                }
               }
             }
           } catch (e) {}
@@ -146,12 +151,16 @@ export default function App() {
               const normalized = normalizeDB(dbObj);
               if (normalized) {
                 const currentLocal = dbRef.current || loadDB();
-                const merged = mergeDatabase(currentLocal, normalized);
-                const calculated = calculatePoints(merged);
-                saveDBLocal(calculated, true);
-                dbRef.current = calculated;
-                setDb(calculated);
-                return true;
+                const remoteTime = normalized.lastModified || 0;
+                const localTime = currentLocal.lastModified || 0;
+                if (remoteTime > localTime) {
+                  const merged = mergeDatabase(currentLocal, normalized);
+                  const calculated = calculatePoints(merged);
+                  saveDBLocal(calculated, true);
+                  dbRef.current = calculated;
+                  setDb(calculated);
+                  return true;
+                }
               }
             }
           } catch (e) {}
@@ -166,14 +175,13 @@ export default function App() {
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const fetchedDirectly = await fetchAppsScriptDataDirectly();
-      if (!fetchedDirectly) {
-        const res = await syncDatabase(dbRef.current);
-        if (res.updated) {
-          const calculated = calculatePoints(res.db);
-          dbRef.current = calculated;
-          setDb(calculated);
-        }
+      const res = await syncDatabase(dbRef.current);
+      if (res.updated) {
+        const calculated = calculatePoints(res.db);
+        dbRef.current = calculated;
+        setDb(calculated);
+      } else {
+        await fetchAppsScriptDataDirectly();
       }
     } catch (e) {
       console.error('Manual refresh error:', e);
@@ -182,29 +190,61 @@ export default function App() {
     }
   };
 
-  // Sync state once on page load and on cross-tab storage changes
+  // Sync state once on page load, periodically every 5 seconds, and on cross-tab storage changes
   useEffect(() => {
     let isSyncing = false;
     const syncData = async () => {
       if (isSyncing) return;
       isSyncing = true;
       try {
-        const fetchedDirectly = await fetchAppsScriptDataDirectly();
-        if (!fetchedDirectly) {
-          const res = await syncDatabase(dbRef.current);
-          if (res.updated) {
-            const calculated = calculatePoints(res.db);
-            dbRef.current = calculated;
-            setDb(calculated);
-          }
+        const res = await syncDatabase(dbRef.current);
+        if (res.updated) {
+          const calculated = calculatePoints(res.db);
+          dbRef.current = calculated;
+          setDb(calculated);
+        } else {
+          await fetchAppsScriptDataDirectly();
         }
       } finally {
         isSyncing = false;
       }
     };
 
-    // Fetch data directly on page load
+    // Initial sync on page load
     syncData();
+
+    // Live Real-Time Multi-Device Sync via Firestore (Instant updates across all phones/laptops on Netlify/GitHub)
+    const unsubscribeFirestore = subscribeToFirestore((firestoreData) => {
+      if (firestoreData && Array.isArray(firestoreData.teams)) {
+        const normalized = normalizeDB(firestoreData);
+        if (normalized) {
+          const currentLocal = dbRef.current || loadDB();
+          const remoteTime = normalized.lastModified || 0;
+          const localTime = currentLocal.lastModified || 0;
+          const localTeamsCount = currentLocal?.teams?.length || 0;
+          const remoteTeamsCount = normalized?.teams?.length || 0;
+          const localResultsCount = currentLocal?.results?.length || 0;
+          const remoteResultsCount = normalized?.results?.length || 0;
+
+          const shouldUpdate = 
+            remoteTime > localTime || 
+            (localTeamsCount === 0 && remoteTeamsCount > 0) ||
+            remoteTeamsCount > localTeamsCount ||
+            remoteResultsCount > localResultsCount;
+
+          if (shouldUpdate) {
+            const merged = mergeDatabase(currentLocal, normalized);
+            const calculated = calculatePoints(merged);
+            saveDBLocal(calculated, true);
+            dbRef.current = calculated;
+            setDb(calculated);
+          }
+        }
+      }
+    });
+
+    // Fallback polling every 5 seconds across all devices/phones
+    const pollInterval = setInterval(syncData, 5000);
 
     // Sync across tabs in the same browser
     let channel: any = null;
@@ -226,6 +266,8 @@ export default function App() {
     window.addEventListener('storage', handleStorageEvent);
 
     return () => {
+      unsubscribeFirestore();
+      clearInterval(pollInterval);
       window.removeEventListener('storage', handleStorageEvent);
       if (channel) channel.close();
     };
