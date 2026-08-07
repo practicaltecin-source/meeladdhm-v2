@@ -72,7 +72,25 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [currentView]);
 
-  // Sync state periodically, on window focus/visibility/online, and cross-tab storage
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await syncDatabase(dbRef.current);
+      if (res.updated) {
+        const calculated = calculatePoints(res.db);
+        dbRef.current = calculated;
+        setDb(calculated);
+      }
+    } catch (e) {
+      console.error('Manual refresh error:', e);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  // Sync state once on page load and on cross-tab storage changes
   useEffect(() => {
     let isSyncing = false;
     const syncData = async () => {
@@ -90,34 +108,14 @@ export default function App() {
       }
     };
 
+    // Fetch data once when application mounts on page load
     syncData();
-
-    // Fast 2-second background polling loop for live sync across devices and Google Sheets
-    const pollInterval = setInterval(syncData, 2000);
-
-    // Sync immediately on focus, tab visibility change, page show (mobile wakeup), or coming back online
-    const handleFocus = () => syncData();
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('online', handleFocus);
-    window.addEventListener('pageshow', handleFocus);
-    document.addEventListener('visibilitychange', handleFocus);
-
-    // Fast sync trigger on user touch/click on mobile if inactive for > 1 second
-    let lastTouchSync = 0;
-    const handleUserTouchSync = () => {
-      const now = Date.now();
-      if (now - lastTouchSync > 1000) {
-        lastTouchSync = now;
-        syncData();
-      }
-    };
-    window.addEventListener('touchstart', handleUserTouchSync, { passive: true });
-    window.addEventListener('click', handleUserTouchSync, { passive: true });
 
     // Sync across tabs in the same browser
     let channel: any = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      const BC = (window as any).BroadcastChannel; channel = new BC('mrms_db_channel');
+      const BC = (window as any).BroadcastChannel; 
+      channel = new BC('mrms_db_channel');
       channel.onmessage = () => {
         const fresh = loadDB();
         setDb(calculatePoints(fresh));
@@ -133,13 +131,6 @@ export default function App() {
     window.addEventListener('storage', handleStorageEvent);
 
     return () => {
-      clearInterval(pollInterval);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('online', handleFocus);
-      window.removeEventListener('pageshow', handleFocus);
-      document.removeEventListener('visibilitychange', handleFocus);
-      window.removeEventListener('touchstart', handleUserTouchSync);
-      window.removeEventListener('click', handleUserTouchSync);
       window.removeEventListener('storage', handleStorageEvent);
       if (channel) channel.close();
     };
@@ -207,12 +198,6 @@ export default function App() {
         channel.postMessage({ type: 'SYNC_NOW', time: Date.now() });
         channel.close();
       } catch (e) {}
-    }
-    // Auto-sync to Google Sheets with debouncing if token & autoSync enabled
-    const sheetId = getSavedSheetId(saved);
-    const token = getCachedToken();
-    if (isAutoSyncEnabled() && sheetId && token) {
-      queueAutoSyncToGoogleSheet(saved, sheetId, token);
     }
   };
 
@@ -322,17 +307,6 @@ export default function App() {
 
     // 2. Sync to Firebase
     await pushToFirebase(clearedDb);
-
-    // 3. Sync & Clear Google Sheets if connected
-    const sheetId = getSavedSheetId();
-    const token = getCachedToken();
-    if (sheetId && token) {
-      try {
-        await syncDataToGoogleSheet(clearedDb, sheetId, token);
-      } catch (e) {
-        console.warn('Google Sheets clear sync error:', e);
-      }
-    }
   };
 
   const handleBulkImportParticipants = (list: any[]) => {
@@ -612,6 +586,8 @@ export default function App() {
           onLogout={handleLogout}
           db={db}
           onTogglePublicSite={handleTogglePublicSite}
+          onRefresh={handleManualRefresh}
+          isRefreshing={isRefreshing}
         />
 
         {/* View Router Routing */}

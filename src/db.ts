@@ -3,7 +3,6 @@ import {
   getSavedSheetId, 
   getCachedToken, 
   isAutoSyncEnabled, 
-  syncDataToGoogleSheet, 
   fetchDataFromGoogleSheet 
 } from './googleSheets';
 
@@ -321,17 +320,6 @@ export async function pushToFirebase(db: Database): Promise<boolean> {
   // Push to local server endpoint
   pushToServer(updated).catch(() => {});
 
-  // Push to Google Sheets if configured
-  const sheetId = getSavedSheetId();
-  const token = getCachedToken();
-  if (sheetId && token && isAutoSyncEnabled()) {
-    try {
-      await syncDataToGoogleSheet(updated, sheetId, token);
-    } catch (e) {
-      console.warn('Auto sync to Google Sheet warning:', e);
-    }
-  }
-
   return true;
 }
 
@@ -361,11 +349,6 @@ export async function resetEntireDatabase(): Promise<Database> {
   fresh.lastModified = Date.now() + 1000;
   saveDBLocal(fresh, true);
   await pushToServer(fresh).catch(() => {});
-  const sheetId = getSavedSheetId();
-  const token = getCachedToken();
-  if (sheetId && token) {
-    syncDataToGoogleSheet(fresh, sheetId, token).catch(() => {});
-  }
   return fresh;
 }
 
@@ -435,37 +418,11 @@ export async function fetchFromAppsScriptDirect(): Promise<Database | null> {
 }
 
 export async function pushToAppsScriptDirect(db: Database): Promise<boolean> {
-  try {
-    const payload = JSON.stringify({
-      action: 'write',
-      db: db,
-      lastModified: db.lastModified || Date.now()
-    });
-
-    fetch(HARDCODED_APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: payload,
-      redirect: 'follow'
-    }).catch(() => {});
-
-    fetch(HARDCODED_APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(db),
-      redirect: 'follow'
-    }).catch(() => {});
-
-    return true;
-  } catch (e) {
-    return false;
-  }
+  // Read-only mode active: app only fetches/reads from Google Apps Script, never writes or modifies it.
+  return true;
 }
 
 export async function pushToServer(db: Database): Promise<{ success: boolean; serverDb?: Database }> {
-  // Push directly to Google Apps Script Web App in parallel
-  pushToAppsScriptDirect(db).catch(() => {});
-
   try {
     const res = await fetch('/api/db', {
       method: 'POST',
@@ -529,11 +486,6 @@ export async function syncDatabase(localDb: Database): Promise<{ db: Database; u
       return { db: calculated, updated: true };
     } else if (localTime > remoteTime) {
       pushToServer(localDb).catch(() => {});
-      const sheetId = getSavedSheetId();
-      const token = getCachedToken();
-      if (sheetId && token && isAutoSyncEnabled()) {
-        syncDataToGoogleSheet(localDb, sheetId, token).catch(() => {});
-      }
       return { db: localDb, updated: false };
     }
 

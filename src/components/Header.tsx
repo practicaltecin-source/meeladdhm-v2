@@ -29,9 +29,11 @@ interface HeaderProps {
   onLogout: () => void;
   db: Database;
   onTogglePublicSite?: (isOffline: boolean) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
-export default function Header({ currentView, onNavigate, isAdmin, onLogout, db, onTogglePublicSite }: HeaderProps) {
+export default function Header({ currentView, onNavigate, isAdmin, onLogout, db, onTogglePublicSite, onRefresh, isRefreshing }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const toggleDrawer = () => setIsOpen(!isOpen);
@@ -108,12 +110,15 @@ export default function Header({ currentView, onNavigate, isAdmin, onLogout, db,
           )}
 
           <button
-            onClick={() => window.location.reload()}
-            title="Refresh Live Results"
-            className="p-1.5 px-2 rounded-lg bg-emerald-100/90 hover:bg-emerald-200 text-emerald-900 transition-all flex items-center gap-1 text-xs font-semibold cursor-pointer border border-emerald-300/60 shadow-2xs active:scale-95"
+            onClick={onRefresh || (() => window.location.reload())}
+            disabled={isRefreshing}
+            title="Refresh Live Data from Backend"
+            className="p-1.5 px-2.5 rounded-lg bg-emerald-100/90 hover:bg-emerald-200 text-emerald-900 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer border border-emerald-300/60 shadow-2xs active:scale-95 disabled:opacity-70 shrink-0"
           >
-            <RotateCw className="w-3.5 h-3.5 text-emerald-700" />
-            <span className="text-[11px] font-medium hidden xs:inline">Sync</span>
+            <RotateCw className={`w-3.5 h-3.5 text-emerald-700 ${isRefreshing ? 'animate-spin text-emerald-900' : ''}`} />
+            <span className="text-[11px] font-medium hidden xs:inline">
+              {isRefreshing ? 'Syncing...' : 'Sync'}
+            </span>
           </button>
 
           {isAdmin && (

@@ -340,98 +340,16 @@ export function buildSheetsData(db: Database) {
 /**
   * Debounced queue wrapper for Google Sheets auto-sync to avoid exceeding API write quota
   */
-let autoSyncTimer: any = null;
-let pendingSyncData: { db: Database; spreadsheetId: string; token: string } | null = null;
-
 export function queueAutoSyncToGoogleSheet(db: Database, spreadsheetId: string, token: string, delayMs = 3500) {
-  pendingSyncData = { db, spreadsheetId, token };
-  if (autoSyncTimer) {
-    clearTimeout(autoSyncTimer);
-  }
-  autoSyncTimer = setTimeout(async () => {
-    if (pendingSyncData) {
-      const dataToSync = pendingSyncData;
-      pendingSyncData = null;
-      try {
-        await syncDataToGoogleSheet(dataToSync.db, dataToSync.spreadsheetId, dataToSync.token);
-      } catch (err) {
-        console.warn('Queued Google Sheets auto-sync error:', err);
-      }
-    }
-  }, delayMs);
+  // Read-only mode active: Google Sheet write operations are disabled.
 }
 
 /**
- * Pushes data to Google Spreadsheet with single-batch clear & automatic retry for rate limits
+ * Pushes data to Google Spreadsheet - Disabled (Read-Only Mode)
  */
 export async function syncDataToGoogleSheet(db: Database, spreadsheetId: string, token: string, retryCount = 0): Promise<boolean> {
-  if (!spreadsheetId || !token) {
-    return false;
-  }
-
-  try {
-    // Confirm sheets exist
-    await ensureSheetsExist(spreadsheetId, token);
-
-    const dataPayload = buildSheetsData(db);
-
-    // Batch clear existing ranges in ONE single API call to save Google Sheets write quota
-    const clearTabs = [
-      "'Scoreboard'!A1:Z5000",
-      "'Winners List'!A1:Z5000",
-      "'Programs List'!A1:Z5000",
-      "'Program Results'!A1:Z5000",
-      "'Participants'!A1:Z5000",
-      "'System Backup'!A1:Z5000"
-    ];
-
-    try {
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ranges: clearTabs }),
-      });
-    } catch (e) {
-      console.warn('Batch clear warning:', e);
-    }
-
-    // Batch update new data
-    const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        valueInputOption: 'USER_ENTERED',
-        data: dataPayload,
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      const errMsg = err?.error?.message || '';
-
-      if ((response.status === 429 || errMsg.includes('Quota exceeded') || response.status === 503) && retryCount < 2) {
-        console.warn(`Google Sheets write quota reached. Retrying in 4 seconds... (Attempt ${retryCount + 1})`);
-        await new Promise(res => setTimeout(res, 4000));
-        return syncDataToGoogleSheet(db, spreadsheetId, token, retryCount + 1);
-      }
-
-      throw new Error(errMsg || 'Failed to update Google Spreadsheet');
-    }
-
-    return true;
-  } catch (err: any) {
-    if (retryCount < 2 && (err?.message?.includes('Quota') || err?.message?.includes('429'))) {
-      await new Promise(res => setTimeout(res, 4000));
-      return syncDataToGoogleSheet(db, spreadsheetId, token, retryCount + 1);
-    }
-    throw err;
-  }
+  // Read-only mode active: Google Sheet write operations are disabled.
+  return true;
 }
 
 /**
@@ -874,13 +792,6 @@ export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: str
     // Return null if completely empty to show user friendly "No valid data found in sheet" message
     if (!hasBackupData && importedProgramCount === 0 && importedParticipantCount === 0 && currentDb.participants.length === 0) {
       return null;
-    }
-
-    // Immediately sync back generated IDs and updated backup to Google Sheet so ID column and System Backup get filled in Sheet
-    try {
-      await syncDataToGoogleSheet(currentDb, spreadsheetId, token);
-    } catch (syncBackErr) {
-      console.warn('Auto sync-back after fetch warning:', syncBackErr);
     }
 
     return currentDb;
