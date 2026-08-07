@@ -464,7 +464,7 @@ export default function Settings({
     setSheetsLoading(true);
     setSheetsStatusMsg(null);
     try {
-      const fetched = await fetchDataFromGoogleSheet(sheetId, token);
+      const fetched = await fetchDataFromGoogleSheet(sheetId, token, db);
       if (fetched) {
         onImportBackup(fetched);
         setSheetsStatusMsg({ type: 'success', text: `Data from Google Sheet successfully imported into the app!` });

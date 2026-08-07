@@ -286,7 +286,7 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
     setSheetsLoading(true);
     setSheetsStatusMsg(null);
     try {
-      const fetched = await fetchDataFromGoogleSheet(sheetId, token);
+      const fetched = await fetchDataFromGoogleSheet(sheetId, token, db);
       if (fetched) {
         onUpdateDb(fetched);
         setSheetsStatusMsg({ type: 'success', text: 'Google Sheet data imported successfully!' });

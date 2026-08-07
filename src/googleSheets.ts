@@ -442,7 +442,7 @@ export function parseCategoriesFromInput(genderStr: string, ageStr: string): Pro
   return categories.length > 0 ? categories : [{ gender: 'General', age: 'General' }];
 }
 
-export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: string): Promise<Database | null> {
+export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: string, existingLocalDb?: Database | null): Promise<Database | null> {
   if (!spreadsheetId || !token) return null;
 
   try {
@@ -782,6 +782,14 @@ export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: str
       }
     } catch (sheetErr) {
       console.warn('Could not read Participants tab:', sheetErr);
+    }
+
+    if (existingLocalDb && existingLocalDb.settings) {
+      currentDb.settings = {
+        ...currentDb.settings,
+        ...existingLocalDb.settings,
+        colorTheme: existingLocalDb.settings.colorTheme || currentDb.settings?.colorTheme
+      };
     }
 
     currentDb = normalizeDB({
