@@ -331,17 +331,26 @@ export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
   const localTime = localDb.lastModified || 0;
   const remoteTime = remoteDb.lastModified || 0;
 
-  // If remote timestamp is strictly newer, remote is authoritative
+  // Always preserve local settings (switches, toggles, notices, admin preferences)
+  // so that read-only Google Apps Script fetches never overwrite or reset user switch toggles.
+  const mergedSettings = {
+    ...(remoteDb.settings || {}),
+    ...(localDb.settings || {})
+  };
+
+  // If remote timestamp is strictly newer, remote competition data is authoritative
   if (remoteTime > localTime) {
-    return remoteDb;
-  }
-  // If local timestamp is strictly newer, local is authoritative
-  if (localTime > remoteTime) {
-    return localDb;
+    return {
+      ...remoteDb,
+      settings: mergedSettings
+    };
   }
 
-  // If timestamps are equal, prefer localDb
-  return localDb || remoteDb;
+  // Otherwise local database is authoritative
+  return {
+    ...localDb,
+    settings: mergedSettings
+  };
 }
 
 export async function resetEntireDatabase(): Promise<Database> {
@@ -491,7 +500,8 @@ export async function syncDatabase(localDb: Database): Promise<{ db: Database; u
     const remoteTime = latestRemote?.lastModified || 0;
 
     if (remoteTime > localTime) {
-      const calculated = calculatePoints(latestRemote);
+      const merged = mergeDatabase(localDb, latestRemote);
+      const calculated = calculatePoints(merged);
       saveDBLocal(calculated, true);
       return { db: calculated, updated: true };
     } else if (localTime > remoteTime) {

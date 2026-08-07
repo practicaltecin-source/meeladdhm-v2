@@ -104,11 +104,15 @@ export default function App() {
             const dbObj = parsed.db || parsed.data || parsed.result || parsed;
             if (dbObj && typeof dbObj === 'object' && Array.isArray(dbObj.teams)) {
               const normalized = normalizeDB(dbObj);
-              const calculated = calculatePoints(normalized);
-              saveDBLocal(calculated, true);
-              dbRef.current = calculated;
-              setDb(calculated);
-              return true;
+              if (normalized) {
+                const currentLocal = dbRef.current || loadDB();
+                const merged = mergeDatabase(currentLocal, normalized);
+                const calculated = calculatePoints(merged);
+                saveDBLocal(calculated, true);
+                dbRef.current = calculated;
+                setDb(calculated);
+                return true;
+              }
             }
           } catch (e) {}
         }
@@ -140,11 +144,15 @@ export default function App() {
             const dbObj = parsed.db || parsed.data || parsed.result || parsed;
             if (dbObj && typeof dbObj === 'object' && Array.isArray(dbObj.teams)) {
               const normalized = normalizeDB(dbObj);
-              const calculated = calculatePoints(normalized);
-              saveDBLocal(calculated, true);
-              dbRef.current = calculated;
-              setDb(calculated);
-              return true;
+              if (normalized) {
+                const currentLocal = dbRef.current || loadDB();
+                const merged = mergeDatabase(currentLocal, normalized);
+                const calculated = calculatePoints(merged);
+                saveDBLocal(calculated, true);
+                dbRef.current = calculated;
+                setDb(calculated);
+                return true;
+              }
             }
           } catch (e) {}
         }
