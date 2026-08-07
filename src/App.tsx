@@ -228,9 +228,7 @@ export default function App() {
 
           const shouldUpdate = 
             remoteTime > localTime || 
-            (localTeamsCount === 0 && remoteTeamsCount > 0) ||
-            remoteTeamsCount > localTeamsCount ||
-            remoteResultsCount > localResultsCount;
+            (localTeamsCount === 0 && remoteTeamsCount > 0);
 
           if (shouldUpdate) {
             const merged = mergeDatabase(currentLocal, normalized);

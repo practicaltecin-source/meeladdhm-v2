@@ -2001,7 +2001,29 @@ export default function Settings({
                     type="checkbox"
                     id="showNoticeChk"
                     checked={showNotice}
-                    onChange={(e) => setShowNotice(e.target.checked)}
+                    onChange={(e) => {
+                      const val = e.target.checked;
+                      setShowNotice(val);
+                      if (onSaveEventInfo) {
+                        onSaveEventInfo({
+                          eventName: evtName,
+                          boardName: brdName,
+                          subtitle: subName,
+                          eventLogo: evtLogo,
+                          showFinalWinner: showWinner,
+                          showScoreboard: showScoreboard,
+                          showCandidatePoints: showCandidatePoints,
+                          showDetailedScoreboard: showDetailedScoreboard,
+                          showIndividualChampions: showIndividualChampions,
+                          showNotice: val,
+                          noticeTitle: noticesList[0]?.title || noticeTitle,
+                          noticeText: noticesList[0]?.text || noticeText,
+                          notices: noticesList,
+                          noticeDurationSecs: Number(noticeDurationSecs) || 8,
+                          colorTheme
+                        });
+                      }
+                    }}
                     className="w-4 h-4 rounded mt-0.5 accent-amber-600 cursor-pointer"
                   />
                   <label htmlFor="showNoticeChk" className="text-xs text-brand-ink font-bold cursor-pointer select-none leading-normal">

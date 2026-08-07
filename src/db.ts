@@ -328,53 +328,15 @@ export async function pushToFirebase(db: Database): Promise<boolean> {
 }
 
 
-export function mergeSettings(localSettings: Settings, remoteSettings: Settings): Settings {
+export function mergeSettings(localSettings: Settings, remoteSettings: Settings, preferRemote: boolean = false): Settings {
   if (!localSettings) return remoteSettings || defaultDB().settings;
   if (!remoteSettings) return localSettings;
 
-  const merged: Settings = {
-    ...defaultDB().settings,
-    ...remoteSettings,
-    ...localSettings
-  };
+  const base = preferRemote 
+    ? { ...defaultDB().settings, ...localSettings, ...remoteSettings }
+    : { ...defaultDB().settings, ...remoteSettings, ...localSettings };
 
-  // Preserve all explicitly defined keys from both sides
-  for (const key of Object.keys(localSettings) as (keyof Settings)[]) {
-    const lVal = localSettings[key];
-    const rVal = remoteSettings[key];
-    if (lVal !== undefined && rVal === undefined) {
-      (merged as any)[key] = lVal;
-    }
-  }
-
-  // Explicit boolean switches
-  const booleanKeys: (keyof Settings)[] = [
-    'isPublicSiteOffline',
-    'isLiveCelebrationActive',
-    'showFinalWinner',
-    'skipPodiumCountdown',
-    'showAlwaysTeamBanner',
-    'showTeamPointsInBanner',
-    'showTeamAnalyticsGraph',
-    'showTeamTicker',
-    'suspenseSwapMode',
-    'showScoreboard',
-    'showCandidatePoints',
-    'showDetailedScoreboard',
-    'showIndividualChampions',
-    'showNotice',
-    'noticePopupOnLoad'
-  ];
-
-  for (const bk of booleanKeys) {
-    if (localSettings[bk] !== undefined && remoteSettings[bk] === undefined) {
-      (merged as any)[bk] = localSettings[bk];
-    } else if (remoteSettings[bk] !== undefined) {
-      (merged as any)[bk] = remoteSettings[bk];
-    }
-  }
-
-  return merged;
+  return base;
 }
 
 export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
@@ -383,19 +345,43 @@ export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
 
   const localTime = localDb.lastModified || 0;
   const remoteTime = remoteDb.lastModified || 0;
+  const preferRemote = remoteTime > localTime;
 
-  const mergedSettings = mergeSettings(localDb?.settings, remoteDb?.settings);
+  const mergedSettings = mergeSettings(localDb?.settings, remoteDb?.settings, preferRemote);
 
-  if (remoteTime > localTime) {
-    return {
-      ...remoteDb,
-      settings: mergedSettings
-    };
+  function mergeArrayById<T extends { id: string }>(localArr: T[] = [], remoteArr: T[] = []): T[] {
+    const map = new Map<string, T>();
+    if (preferRemote) {
+      for (const item of localArr) {
+        if (item && item.id) map.set(item.id, item);
+      }
+      for (const item of remoteArr) {
+        if (item && item.id) map.set(item.id, item);
+      }
+    } else {
+      for (const item of remoteArr) {
+        if (item && item.id) map.set(item.id, item);
+      }
+      for (const item of localArr) {
+        if (item && item.id) map.set(item.id, item);
+      }
+    }
+    return Array.from(map.values());
   }
 
+  let teams = mergeArrayById(localDb.teams, remoteDb.teams);
+  let programs = mergeArrayById(localDb.programs, remoteDb.programs);
+  let participants = mergeArrayById(localDb.participants, remoteDb.participants);
+  let results = mergeArrayById(localDb.results, remoteDb.results);
+
   return {
-    ...localDb,
-    settings: mergedSettings
+    teams,
+    programs,
+    participants,
+    results,
+    settings: mergedSettings,
+    prevRanks: preferRemote ? (remoteDb.prevRanks || localDb.prevRanks || {}) : (localDb.prevRanks || remoteDb.prevRanks || {}),
+    lastModified: Math.max(localTime, remoteTime)
   };
 }
 
@@ -547,14 +533,10 @@ export async function syncDatabase(localDb: Database): Promise<{ db: Database; u
     const remoteTime = latestRemote?.lastModified || 0;
     const localTeamsCount = localDb?.teams?.length || 0;
     const remoteTeamsCount = latestRemote?.teams?.length || 0;
-    const localResultsCount = localDb?.results?.length || 0;
-    const remoteResultsCount = latestRemote?.results?.length || 0;
 
     const shouldUpdateFromRemote = 
       remoteTime > localTime || 
-      localTeamsCount === 0 && remoteTeamsCount > 0 ||
-      remoteTeamsCount > localTeamsCount ||
-      remoteResultsCount > localResultsCount;
+      (localTeamsCount === 0 && remoteTeamsCount > 0);
 
     if (shouldUpdateFromRemote) {
       const merged = mergeDatabase(localDb, latestRemote);

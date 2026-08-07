@@ -2278,7 +2278,17 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
               <input
                 type="checkbox"
                 checked={noticeEnabled}
-                onChange={(e) => setNoticeEnabled(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setNoticeEnabled(val);
+                  onUpdateDb({
+                    ...db,
+                    settings: {
+                      ...db.settings,
+                      showNotice: val
+                    }
+                  });
+                }}
                 className="w-4 h-4 rounded accent-amber-600 cursor-pointer"
               />
               Enable Notice Board & Popup on Home Screen
