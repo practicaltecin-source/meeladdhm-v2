@@ -74,14 +74,98 @@ export default function App() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Directly embedded Google Apps Script Web App fetch URL
+  const APPS_SCRIPT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxao2v_cKiIznKc98Td20VsOKe1-niZmF9pk1qo1s3suIUTy4AcUNyFCI485XXKGR3r/exec';
+
+  const fetchAppsScriptDataDirectly = async (): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      // 1. Primary GET fetch request directly to Google Apps Script Web App URL
+      const res = await fetch(APPS_SCRIPT_WEB_APP_URL, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 
+          'Accept': 'application/json, text/plain, */*',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        redirect: 'follow',
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const text = await res.text();
+        if (text && !text.includes('Script function not found')) {
+          try {
+            const parsed = JSON.parse(text);
+            const dbObj = parsed.db || parsed.data || parsed.result || parsed;
+            if (dbObj && typeof dbObj === 'object' && Array.isArray(dbObj.teams)) {
+              const normalized = normalizeDB(dbObj);
+              const calculated = calculatePoints(normalized);
+              saveDBLocal(calculated, true);
+              dbRef.current = calculated;
+              setDb(calculated);
+              return true;
+            }
+          } catch (e) {}
+        }
+      }
+
+      // 2. Secondary POST read fetch request fallback directly to Google Apps Script Web App URL
+      const postController = new AbortController();
+      const postTimeout = setTimeout(() => postController.abort(), 8000);
+
+      const postRes = await fetch(APPS_SCRIPT_WEB_APP_URL, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 
+          'Content-Type': 'text/plain',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        },
+        body: JSON.stringify({ action: 'read' }),
+        redirect: 'follow',
+        signal: postController.signal
+      });
+      clearTimeout(postTimeout);
+
+      if (postRes.ok) {
+        const postText = await postRes.text();
+        if (postText && !postText.includes('Script function not found')) {
+          try {
+            const parsed = JSON.parse(postText);
+            const dbObj = parsed.db || parsed.data || parsed.result || parsed;
+            if (dbObj && typeof dbObj === 'object' && Array.isArray(dbObj.teams)) {
+              const normalized = normalizeDB(dbObj);
+              const calculated = calculatePoints(normalized);
+              saveDBLocal(calculated, true);
+              dbRef.current = calculated;
+              setDb(calculated);
+              return true;
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('Direct Apps Script fetch warning:', e);
+    }
+    return false;
+  };
+
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const res = await syncDatabase(dbRef.current);
-      if (res.updated) {
-        const calculated = calculatePoints(res.db);
-        dbRef.current = calculated;
-        setDb(calculated);
+      const fetchedDirectly = await fetchAppsScriptDataDirectly();
+      if (!fetchedDirectly) {
+        const res = await syncDatabase(dbRef.current);
+        if (res.updated) {
+          const calculated = calculatePoints(res.db);
+          dbRef.current = calculated;
+          setDb(calculated);
+        }
       }
     } catch (e) {
       console.error('Manual refresh error:', e);
@@ -97,18 +181,21 @@ export default function App() {
       if (isSyncing) return;
       isSyncing = true;
       try {
-        const res = await syncDatabase(dbRef.current);
-        if (res.updated) {
-          const calculated = calculatePoints(res.db);
-          dbRef.current = calculated;
-          setDb(calculated);
+        const fetchedDirectly = await fetchAppsScriptDataDirectly();
+        if (!fetchedDirectly) {
+          const res = await syncDatabase(dbRef.current);
+          if (res.updated) {
+            const calculated = calculatePoints(res.db);
+            dbRef.current = calculated;
+            setDb(calculated);
+          }
         }
       } finally {
         isSyncing = false;
       }
     };
 
-    // Fetch data once when application mounts on page load
+    // Fetch data directly on page load
     syncData();
 
     // Sync across tabs in the same browser
