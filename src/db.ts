@@ -366,11 +366,16 @@ export const HARDCODED_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKf
 export async function fetchFromAppsScriptDirect(): Promise<Database | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), 6000);
 
     const res = await fetch(HARDCODED_APPS_SCRIPT_URL, {
       method: 'GET',
-      headers: { 'Accept': 'application/json, text/plain, */*' },
+      cache: 'no-store',
+      headers: { 
+        'Accept': 'application/json, text/plain, */*',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      },
       redirect: 'follow',
       signal: controller.signal
     });
@@ -390,11 +395,16 @@ export async function fetchFromAppsScriptDirect(): Promise<Database | null> {
     }
 
     const postController = new AbortController();
-    const postTimeout = setTimeout(() => postController.abort(), 3500);
+    const postTimeout = setTimeout(() => postController.abort(), 6000);
 
     const postRes = await fetch(HARDCODED_APPS_SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      cache: 'no-store',
+      headers: { 
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      },
       body: JSON.stringify({ action: 'read' }),
       redirect: 'follow',
       signal: postController.signal
