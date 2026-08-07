@@ -642,7 +642,7 @@ export default function App() {
               Page Not Found (Public Link Offline)
             </h1>
             <p className="text-slate-300 text-xs md:text-sm mt-3 leading-relaxed">
-              {db.settings.offlineMessage || 'This public link is currently switched off by the event committee. It will be turned back ON when results and updates are published.'}
+              {db.settings.offlineMessage || 'This public link is currently switched off by Abdul Haseeb PC. It will be turned back ON when results and updates are published.'}
             </p>
           </div>
 
@@ -686,7 +686,7 @@ export default function App() {
         </div>
 
         <p className="text-[11px] text-slate-500 mt-6 font-mono">
-          {db.settings.eventName || 'KALIMA 2k26 MEELAD FEST'} &bull; Managed by Event Committee
+          {db.settings.eventName || 'KALIMA 2k26 MEELAD FEST'} &bull; Managed by Abdul Haseeb PC
         </p>
       </div>
     );

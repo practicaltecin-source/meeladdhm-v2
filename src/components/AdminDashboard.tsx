@@ -889,13 +889,13 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
 
     const dupCode = db.programs.find(p => p.code.toUpperCase() === trimmedCode && p.id !== editingId);
     if (dupCode) {
-      alert(`⚠️ പ്രോഗ്രാം കോഡ് (${trimmedCode}) ഇതിനകം "${dupCode.name}" എന്ന പ്രോഗ്രാമിന് നൽകിയിട്ടുണ്ട്!\n\n(Program code "${trimmedCode}" already exists for "${dupCode.name}")`);
+      alert(`⚠️ Program code "${trimmedCode}" is already assigned to "${dupCode.name}"!`);
       return;
     }
 
     const dupName = db.programs.find(p => p.name.trim().toLowerCase().replace(/\s+/g, ' ') === trimmedName && p.id !== editingId);
     if (dupName) {
-      alert(`⚠️ "${progName.trim()}" എന്ന പേരിൽ പ്രോഗ്രാം ഇതിനകം ചേർത്തിട്ടുണ്ട്! [Code: ${dupName.code}]\n\n(Program "${progName.trim()}" already exists in the system)`);
+      alert(`⚠️ Program "${progName.trim()}" already exists in the system! [Code: ${dupName.code}]`);
       return;
     }
 
@@ -3107,8 +3107,8 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-extrabold text-xs sm:text-sm tracking-tight">
                       {duplicateReport.totalIssueCount > 0
-                        ? `⚠️ ${duplicateReport.totalIssueCount} ഡ്യൂപ്ലിക്കേറ്റ് പ്രശ്നങ്ങൾ കണ്ടെത്തി (Duplicate Issues Detected)`
-                        : '✅ ഡ്യൂപ്ലിക്കേറ്റുകൾ ഒന്നും ഇല്ല (All Data Clean & Unique)'}
+                        ? `⚠️ ${duplicateReport.totalIssueCount} Duplicate Issues Detected`
+                        : '✅ No Duplicates Found (All Data Clean & Unique)'}
                     </span>
                     {duplicateReport.totalIssueCount > 0 && (
                       <span className="px-2 py-0.5 text-[10px] font-black bg-amber-600 text-white rounded-full animate-pulse">
@@ -3118,8 +3118,8 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                   </div>
                   <p className="text-[11px] text-brand-ink-soft mt-0.5 leading-tight">
                     {duplicateReport.totalIssueCount > 0
-                      ? 'പ്രോഗ്രാം കോഡ്, പേര്, അല്ലെങ്കിൽ ഇരട്ട ചെസ്റ്റ് നമ്പറുകൾ കണ്ടെത്താനും ഓട്ടോ-ക്ലീൻ ചെയ്യാനും സജ്ജമാണ്.'
-                      : 'എല്ലാ പ്രോഗ്രാം കോഡുകളും, പേരുകളും, ചെസ്റ്റ് നമ്പറുകളും യൂണിക് (Unique) ആണ്.'}
+                      ? 'System is ready to inspect and auto-clean duplicate program codes, names, or double chest numbers.'
+                      : 'All program codes, names, and chest numbers are unique.'}
                   </p>
                 </div>
               </div>
@@ -3663,15 +3663,15 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xl">⚠️</span>
                       <h4 className="text-xs md:text-sm font-black text-amber-950 uppercase tracking-wide">
-                        അഡ്മിൻ സ്പെഷ്യൽ: {zeroProgCount} മത്സരാർത്ഥികൾക്ക് ഇതുവരെ പരിപാടികൾ ഒന്നുമില്ല!
+                        Admin Notice: {zeroProgCount} Candidates have zero assigned programs!
                       </h4>
                       <span className="text-[10px] bg-amber-800 text-white font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
                         Admin Committee Only
                       </span>
                     </div>
                     <p className="text-[11px] text-amber-900 font-medium leading-relaxed">
-                      എല്ലാ കാറ്റഗറികളിലുമായി (Kids, Sub Junior, Junior, Senior, Super Senior - Boys/Girls/General) പരിപാടിയിൽ പേര് ചേർക്കാത്തവരുടെ കണക്ക്:
-                      <b className="ml-1 text-sky-900 font-bold">👦 Boys: {boysZero}</b> &bull; <b className="text-pink-900 font-bold">👧 Girls: {girlsZero}</b>. ഇവരെ തിരിഞ്ഞുപിടിച്ച് പരിപാടികൾ ഏൽപ്പിക്കാം!
+                      Unassigned candidates across categories (Kids, Sub Junior, Junior, Senior, Super Senior):
+                      <b className="ml-1 text-sky-900 font-bold">👦 Boys: {boysZero}</b> &bull; <b className="text-pink-900 font-bold">👧 Girls: {girlsZero}</b>. Click below to assign events to them.
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -3683,7 +3683,7 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                           : 'bg-amber-700 hover:bg-amber-800 text-white'
                       }`}
                     >
-                      🔍 0-Program Candidates മാത്രം കാണുക ({zeroProgCount})
+                      🔍 View 0-Program Candidates ({zeroProgCount})
                     </button>
                     {participantProgramFilter === 'zero' && (
                       <button
@@ -3916,7 +3916,7 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                           <b className="text-xs md:text-sm text-brand-ink font-semibold truncate">{pa.name}</b>
                           {isZeroPrograms && (
                             <span className="px-2 py-0.5 bg-amber-500 text-white font-extrabold text-[9px] rounded-full animate-pulse uppercase tracking-wider">
-                              ⚠️ 0 Programs (ഒഴിഞ്ഞു നടക്കുന്നയാൾ)
+                              ⚠️ 0 Programs (Unassigned)
                             </span>
                           )}
                         </div>
@@ -3930,7 +3930,7 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                             onClick={() => handleOpenParticipant(pa.id)}
                             className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] rounded-lg shadow-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                           >
-                            ➕ പരിപാടി ഏൽപ്പിക്കുക
+                            ➕ Assign Program
                           </button>
                         )}
                         <button onClick={() => handleOpenParticipant(pa.id)} className="p-2 bg-brand-bg rounded-lg hover:bg-brand-line/50 transition-colors text-brand-green-800 cursor-pointer" title="Edit Candidate">
@@ -5159,7 +5159,7 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                     <label className="text-xs font-bold text-brand-ink-soft">Select Program</label>
                     {resProgId && db.results.some(r => r.programId === resProgId) && (
                       <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
-                        ✅ RESULT ALREADY OUT (റിസൾട്ട് വന്നിട്ടുണ്ട്)
+                        ✅ RESULT ALREADY PUBLISHED
                       </span>
                     )}
                   </div>
@@ -5179,10 +5179,10 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                 {resProgId && db.results.some(r => r.programId === resProgId) && (
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-900 text-xs space-y-1">
                     <div className="font-bold flex items-center gap-1.5 text-amber-900">
-                      <span>⚠️</span> Result Already Published! (ഈ പ്രോഗ്രാമിന്റെ ഫലം മുമ്പ് പ്രഖ്യാപിച്ചതാണ്)
+                      <span>⚠️</span> Result Already Published!
                     </div>
                     <p className="text-[11px] text-amber-800 leading-tight">
-                      നിലവിൽ ഉള്ള ഫലം തിരുത്താനും ഓവർറൈറ്റ് (Update) ചെയ്യാനും താഴെയുള്ള വിവരങ്ങൾ മാറ്റിയെഴുതി Save ചെയ്യുക.
+                      To modify or update the existing result, edit the values below and click Save.
                     </p>
                   </div>
                 )}
@@ -5778,11 +5778,11 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                 <h3 className="font-display font-bold text-brand-green-950 text-base md:text-lg flex items-center gap-2">
                   <span>🔍 Data Duplicate Inspector &amp; Cleaner</span>
                   <span className="text-xs font-normal text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full font-sans font-bold">
-                    ഡ്യൂപ്ലിക്കേറ്റ് ഇൻസ്‌പെക്ടർ
+                    Duplicate Inspector
                   </span>
                 </h3>
                 <p className="text-xs text-brand-ink-soft">
-                  കണ്ടെത്തിയ ഡ്യൂപ്ലിക്കേറ്റ് പ്രോഗ്രാമുകളും ഇരട്ട ചെസ്റ്റ് നമ്പറുകളും പരിശോധിച്ചു പരിഹരിക്കാം.
+                  Inspect and resolve duplicate programs or conflicting chest numbers.
                 </p>
               </div>
             </div>

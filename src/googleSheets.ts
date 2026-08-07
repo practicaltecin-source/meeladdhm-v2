@@ -109,7 +109,7 @@ export async function signInWithGoogleForSheets(): Promise<{ user: User; accessT
         await signInWithRedirect(auth, provider);
         return new Promise(() => {});
       } catch (redirectErr: any) {
-        throw new Error('⚠️ Popup blocked! Please allow popups or open the app in a new browser tab to complete Google Sign-In.\n(ബ്രൗസർ പോപ്പ്-അപ്പ് ബ്ലോക്ക് ചെയ്തു. മുകളിലെ "Open in new tab" ബട്ടൺ ക്ലിക്ക് ചെയ്യുക).');
+        throw new Error('⚠️ Popup blocked! Please allow popups or open the app in a new browser tab to complete Google Sign-In.');
       }
     }
     throw error;

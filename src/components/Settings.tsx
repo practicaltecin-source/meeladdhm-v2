@@ -1190,7 +1190,7 @@ export default function Settings({
                   }
                 }}
                 className="w-full px-3.5 py-2 bg-brand-bg border border-brand-line rounded-xl text-xs text-brand-ink focus:outline-none focus:border-brand-gold-500"
-                placeholder="This public link is currently switched off by the committee."
+                placeholder="This public link is currently switched off by Abdul Haseeb PC."
               />
             </div>
           </div>
@@ -1747,7 +1747,7 @@ export default function Settings({
                     )}
                   </div>
                   <p className="text-[11px] text-brand-green-900 font-medium leading-relaxed">
-                    കൗതുകം / തിരിമറി മോഡ്: സ്കോർബോർഡിൽ 1, 2, 3 സ്ഥാനത്തുള്ള ടീമുകൾ കൃത്യമായ സെക്കൻഡുകളുടെ ഇടവേളയിൽ മാറിമാറി കാണിക്കും. സ്വിച്ച് ഓഫ് ചെയ്താൽ യഥാർത്ഥ റാങ്ക് തിരികെ വരും.
+                    Dynamic Leaderboard Mode: Cycle teams in top positions at regular intervals. Turning off restores actual rankings.
                   </p>
                 </div>
 
@@ -1776,7 +1776,7 @@ export default function Settings({
               {db.settings?.suspenseSwapMode && (
                 <div className="pt-2 border-t border-amber-300/60 flex flex-wrap items-center justify-between gap-2 text-xs">
                   <label className="font-bold text-brand-green-950 flex items-center gap-1.5">
-                    ⏱️ Rotation Speed (ഇടവേള സെക്കൻഡുകളിൽ):
+                    ⏱️ Rotation Speed (Interval in seconds):
                   </label>
                   <select
                     value={db.settings?.suspenseIntervalSec || 3}

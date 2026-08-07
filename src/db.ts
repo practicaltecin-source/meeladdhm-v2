@@ -338,7 +338,9 @@ export function mergeSettings(localSettings: Settings, remoteSettings: Settings,
 
   return {
     ...base,
-    colorTheme: localSettings.colorTheme || remoteSettings.colorTheme || base.colorTheme,
+    colorTheme: preferRemote && remoteSettings.colorTheme
+      ? remoteSettings.colorTheme
+      : (localSettings.colorTheme || remoteSettings.colorTheme || base.colorTheme),
     isPublicSiteOffline: preferRemote && remoteSettings.isPublicSiteOffline !== undefined
       ? remoteSettings.isPublicSiteOffline
       : (localSettings.isPublicSiteOffline !== undefined ? localSettings.isPublicSiteOffline : base.isPublicSiteOffline),
