@@ -336,7 +336,21 @@ export function mergeSettings(localSettings: Settings, remoteSettings: Settings,
     ? { ...defaultDB().settings, ...localSettings, ...remoteSettings }
     : { ...defaultDB().settings, ...remoteSettings, ...localSettings };
 
-  return base;
+  return {
+    ...base,
+    isPublicSiteOffline: preferRemote && remoteSettings.isPublicSiteOffline !== undefined
+      ? remoteSettings.isPublicSiteOffline
+      : (localSettings.isPublicSiteOffline !== undefined ? localSettings.isPublicSiteOffline : base.isPublicSiteOffline),
+    offlineMessage: preferRemote && remoteSettings.offlineMessage !== undefined
+      ? remoteSettings.offlineMessage
+      : (localSettings.offlineMessage !== undefined ? localSettings.offlineMessage : base.offlineMessage),
+    showNotice: preferRemote && remoteSettings.showNotice !== undefined
+      ? remoteSettings.showNotice
+      : (localSettings.showNotice !== undefined ? localSettings.showNotice : base.showNotice),
+    isLiveCelebrationActive: preferRemote && remoteSettings.isLiveCelebrationActive !== undefined
+      ? remoteSettings.isLiveCelebrationActive
+      : (localSettings.isLiveCelebrationActive !== undefined ? localSettings.isLiveCelebrationActive : base.isLiveCelebrationActive),
+  };
 }
 
 export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
@@ -349,30 +363,21 @@ export function mergeDatabase(localDb: Database, remoteDb: Database): Database {
 
   const mergedSettings = mergeSettings(localDb?.settings, remoteDb?.settings, preferRemote);
 
-  function mergeArrayById<T extends { id: string }>(localArr: T[] = [], remoteArr: T[] = []): T[] {
-    const map = new Map<string, T>();
-    if (preferRemote) {
-      for (const item of localArr) {
-        if (item && item.id) map.set(item.id, item);
-      }
-      for (const item of remoteArr) {
-        if (item && item.id) map.set(item.id, item);
-      }
-    } else {
-      for (const item of remoteArr) {
-        if (item && item.id) map.set(item.id, item);
-      }
-      for (const item of localArr) {
-        if (item && item.id) map.set(item.id, item);
-      }
-    }
-    return Array.from(map.values());
-  }
+  let teams = preferRemote 
+    ? (remoteDb.teams && remoteDb.teams.length > 0 ? remoteDb.teams : (localDb.teams || []))
+    : (localDb.teams && localDb.teams.length > 0 ? localDb.teams : (remoteDb.teams || []));
 
-  let teams = mergeArrayById(localDb.teams, remoteDb.teams);
-  let programs = mergeArrayById(localDb.programs, remoteDb.programs);
-  let participants = mergeArrayById(localDb.participants, remoteDb.participants);
-  let results = mergeArrayById(localDb.results, remoteDb.results);
+  let programs = preferRemote 
+    ? (remoteDb.programs && remoteDb.programs.length > 0 ? remoteDb.programs : (localDb.programs || []))
+    : (localDb.programs && localDb.programs.length > 0 ? localDb.programs : (remoteDb.programs || []));
+
+  let participants = preferRemote 
+    ? (remoteDb.participants && remoteDb.participants.length > 0 ? remoteDb.participants : (localDb.participants || []))
+    : (localDb.participants && localDb.participants.length > 0 ? localDb.participants : (remoteDb.participants || []));
+
+  let results = preferRemote 
+    ? (remoteDb.results !== undefined ? remoteDb.results : (localDb.results || []))
+    : (localDb.results !== undefined ? localDb.results : (remoteDb.results || []));
 
   return {
     teams,

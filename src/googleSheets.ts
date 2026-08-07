@@ -786,7 +786,7 @@ export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: str
 
     currentDb = normalizeDB({
       ...currentDb,
-      lastModified: Date.now() + 10000
+      lastModified: hasBackupData ? (currentDb.lastModified || Date.now()) : 1
     }) || currentDb;
 
     // Return null if completely empty to show user friendly "No valid data found in sheet" message
