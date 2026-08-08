@@ -515,7 +515,9 @@ export async function fetchDataFromGoogleSheet(spreadsheetId: string, token: str
               color: existingTeam?.color || '#1b8155',
               captain: captain !== '-' ? captain : (existingTeam?.captain || ''),
               boysCaptain: existingTeam?.boysCaptain || '',
+              boysCaptain2: existingTeam?.boysCaptain2 || '',
               girlsCaptain: existingTeam?.girlsCaptain || '',
+              girlsCaptain2: existingTeam?.girlsCaptain2 || '',
               points
             });
           });

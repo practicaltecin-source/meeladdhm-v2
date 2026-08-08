@@ -2325,7 +2325,9 @@ export default function Settings({
                   color: ['#1b8155', '#2a5d9c', '#b5306e', '#d97706', '#7c3aed'][teamsList.length % 5],
                   captain: '',
                   boysCaptain: '',
+                  boysCaptain2: '',
                   girlsCaptain: '',
+                  girlsCaptain2: '',
                   points: 0
                 };
                 setTeamsList([...teamsList, newTeam]);
@@ -2337,7 +2339,7 @@ export default function Settings({
           </div>
 
           <p className="text-[11px] text-brand-ink-soft leading-relaxed">
-            Customize team names, emoji symbols, primary colors, General Captain, Boy Captain, and Girl Captain. All updates sync live to the public scoreboard in real time.
+            Customize team names, emoji symbols, primary colors, General Captain, 1st & 2nd Boy Leaders, and 1st & 2nd Girl Leaders. All updates sync live to the public scoreboard in real time.
           </p>
 
           <div className="space-y-3">
@@ -2430,8 +2432,8 @@ export default function Settings({
                   </div>
                 </div>
 
-                {/* Captains: General, Boy & Girl */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                {/* Captains & Leaders: General, Boy L1, Boy L2, Girl L1, Girl L2 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 pt-1">
                   <div>
                     <label className="text-[10px] font-bold text-brand-ink-soft block mb-0.5">
                       ⭐ General Captain:
@@ -2451,7 +2453,7 @@ export default function Settings({
 
                   <div>
                     <label className="text-[10px] font-bold text-brand-green-900 block mb-0.5">
-                      👦 Boy Captain:
+                      👦 1st Boy Leader:
                     </label>
                     <input
                       type="text"
@@ -2467,8 +2469,25 @@ export default function Settings({
                   </div>
 
                   <div>
+                    <label className="text-[10px] font-bold text-brand-green-900 block mb-0.5">
+                      👦 2nd Boy Leader:
+                    </label>
+                    <input
+                      type="text"
+                      value={t.boysCaptain2 || ''}
+                      onChange={(e) => {
+                        const next = [...teamsList];
+                        next[idx] = { ...next[idx], boysCaptain2: e.target.value };
+                        setTeamsList(next);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-brand-line rounded-lg text-xs font-semibold text-brand-ink focus:outline-none"
+                      placeholder="e.g. Bilal"
+                    />
+                  </div>
+
+                  <div>
                     <label className="text-[10px] font-bold text-pink-900 block mb-0.5">
-                      👧 Girl Captain:
+                      👧 1st Girl Leader:
                     </label>
                     <input
                       type="text"
@@ -2480,6 +2499,23 @@ export default function Settings({
                       }}
                       className="w-full px-2.5 py-1.5 bg-white border border-brand-line rounded-lg text-xs font-semibold text-brand-ink focus:outline-none"
                       placeholder="e.g. Fathima"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-pink-900 block mb-0.5">
+                      👧 2nd Girl Leader:
+                    </label>
+                    <input
+                      type="text"
+                      value={t.girlsCaptain2 || ''}
+                      onChange={(e) => {
+                        const next = [...teamsList];
+                        next[idx] = { ...next[idx], girlsCaptain2: e.target.value };
+                        setTeamsList(next);
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-brand-line rounded-lg text-xs font-semibold text-brand-ink focus:outline-none"
+                      placeholder="e.g. Ayisha"
                     />
                   </div>
                 </div>

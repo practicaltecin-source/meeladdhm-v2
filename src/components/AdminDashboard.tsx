@@ -690,7 +690,9 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
   const [teamColor, setTeamColor] = useState('#1b8155');
   const [teamCaptain, setTeamCaptain] = useState('');
   const [teamBoysCaptain, setTeamBoysCaptain] = useState('');
+  const [teamBoysCaptain2, setTeamBoysCaptain2] = useState('');
   const [teamGirlsCaptain, setTeamGirlsCaptain] = useState('');
+  const [teamGirlsCaptain2, setTeamGirlsCaptain2] = useState('');
 
   // Form states - Program
   const [progCode, setProgCode] = useState('');
@@ -754,7 +756,9 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
         setTeamColor(t.color);
         setTeamCaptain(t.captain || '');
         setTeamBoysCaptain(t.boysCaptain || '');
+        setTeamBoysCaptain2(t.boysCaptain2 || '');
         setTeamGirlsCaptain(t.girlsCaptain || '');
+        setTeamGirlsCaptain2(t.girlsCaptain2 || '');
         setEditingId(id);
       }
     } else {
@@ -763,7 +767,9 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
       setTeamColor('#1b8155');
       setTeamCaptain('');
       setTeamBoysCaptain('');
+      setTeamBoysCaptain2('');
       setTeamGirlsCaptain('');
+      setTeamGirlsCaptain2('');
     }
     setModalType('team');
   };
@@ -777,7 +783,9 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
       color: teamColor,
       captain: teamCaptain.trim(),
       boysCaptain: teamBoysCaptain.trim(),
-      girlsCaptain: teamGirlsCaptain.trim()
+      boysCaptain2: teamBoysCaptain2.trim(),
+      girlsCaptain: teamGirlsCaptain.trim(),
+      girlsCaptain2: teamGirlsCaptain2.trim()
     };
 
     if (editingId) {
@@ -3222,11 +3230,13 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
                             <span className="text-lg">{t.symbol}</span> {t.name}
                           </b>
                           <small className="block text-[10px] text-brand-ink-soft mt-0.5 font-sans leading-relaxed">
-                            {t.boysCaptain || t.girlsCaptain ? (
+                            {t.boysCaptain || t.boysCaptain2 || t.girlsCaptain || t.girlsCaptain2 ? (
                               <>
                                 {t.captain && <span className="mr-2">General: <b>{t.captain}</b></span>}
-                                {t.boysCaptain && <span className="mr-2">👦 Boy: <b>{t.boysCaptain}</b></span>}
-                                {t.girlsCaptain && <span className="mr-2">👧 Girl: <b>{t.girlsCaptain}</b></span>}
+                                {t.boysCaptain && <span className="mr-2">👦 Boy L1: <b>{t.boysCaptain}</b></span>}
+                                {t.boysCaptain2 && <span className="mr-2">👦 Boy L2: <b>{t.boysCaptain2}</b></span>}
+                                {t.girlsCaptain && <span className="mr-2">👧 Girl L1: <b>{t.girlsCaptain}</b></span>}
+                                {t.girlsCaptain2 && <span className="mr-2">👧 Girl L2: <b>{t.girlsCaptain2}</b></span>}
                               </>
                             ) : (
                               <span>Captain: {t.captain || 'None'}</span>
@@ -4639,12 +4649,23 @@ export default function AdminDashboard({ db, onUpdateDb, onAddResultDirectly, on
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
-                      <label className="text-[11px] font-bold text-brand-green-900 block mb-1">👦 Boy Captain Name</label>
+                      <label className="text-[11px] font-bold text-brand-green-900 block mb-1">👦 1st Boy Leader</label>
                       <input type="text" value={teamBoysCaptain} onChange={(e) => setTeamBoysCaptain(e.target.value)} placeholder="e.g. Riaz" className="w-full px-3 py-2 bg-brand-bg border border-brand-line rounded-xl text-xs focus:outline-none" />
                     </div>
                     <div>
-                      <label className="text-[11px] font-bold text-pink-900 block mb-1">👧 Girl Captain Name</label>
+                      <label className="text-[11px] font-bold text-brand-green-900 block mb-1">👦 2nd Boy Leader</label>
+                      <input type="text" value={teamBoysCaptain2} onChange={(e) => setTeamBoysCaptain2(e.target.value)} placeholder="e.g. Bilal" className="w-full px-3 py-2 bg-brand-bg border border-brand-line rounded-xl text-xs focus:outline-none" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-pink-900 block mb-1">👧 1st Girl Leader</label>
                       <input type="text" value={teamGirlsCaptain} onChange={(e) => setTeamGirlsCaptain(e.target.value)} placeholder="e.g. Nuha" className="w-full px-3 py-2 bg-brand-bg border border-brand-line rounded-xl text-xs focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-pink-900 block mb-1">👧 2nd Girl Leader</label>
+                      <input type="text" value={teamGirlsCaptain2} onChange={(e) => setTeamGirlsCaptain2(e.target.value)} placeholder="e.g. Ayisha" className="w-full px-3 py-2 bg-brand-bg border border-brand-line rounded-xl text-xs focus:outline-none" />
                     </div>
                   </div>
                 </div>

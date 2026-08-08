@@ -6,7 +6,9 @@ export interface Team {
   color: string;
   captain: string;
   boysCaptain?: string;
+  boysCaptain2?: string;
   girlsCaptain?: string;
+  girlsCaptain2?: string;
   points: number;
 }
 

@@ -1051,10 +1051,13 @@ export default function Scoreboard({ db, onUpdateDb }: ScoreboardProps) {
                           {team.name}
                         </b>
                         <small className="block text-[10px] text-brand-ink-soft leading-tight mt-0.5 space-y-1">
-                          {team.boysCaptain || team.girlsCaptain ? (
-                            <span className="flex flex-wrap items-center gap-x-2 truncate">
-                              {team.boysCaptain && <span>👦 Boy Captain: <b className="text-brand-ink">{team.boysCaptain}</b></span>}
-                              {team.girlsCaptain && <span>👧 Girl Captain: <b className="text-brand-ink">{team.girlsCaptain}</b></span>}
+                          {team.boysCaptain || team.boysCaptain2 || team.girlsCaptain || team.girlsCaptain2 ? (
+                            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              {team.captain && <span>⭐ General: <b className="text-brand-ink">{team.captain}</b></span>}
+                              {team.boysCaptain && <span>👦 Boy L1: <b className="text-brand-ink">{team.boysCaptain}</b></span>}
+                              {team.boysCaptain2 && <span>👦 Boy L2: <b className="text-brand-ink">{team.boysCaptain2}</b></span>}
+                              {team.girlsCaptain && <span>👧 Girl L1: <b className="text-brand-ink">{team.girlsCaptain}</b></span>}
+                              {team.girlsCaptain2 && <span>👧 Girl L2: <b className="text-brand-ink">{team.girlsCaptain2}</b></span>}
                             </span>
                           ) : team.captain ? (
                             <span className="truncate block">Captain: {team.captain}</span>
